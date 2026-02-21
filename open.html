@@ -1,0 +1,768 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reproductor Multimedia Profesional</title>
+  <!-- Tailwind + iconos + fuentes -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0,0" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    .volume-hover:hover .volume-slider { width: 80px; opacity: 1; }
+    .volume-slider { width: 0; opacity: 0; transition: all 0.2s; }
+    .progress-thumb { opacity: 0; transition: opacity 0.2s; }
+    .progress-container:hover .progress-thumb { opacity: 1; }
+    .panel-open .media-content { width: 60%; }
+    .panel-open .side-panel { width: 40%; }
+    .side-panel { transition: width 0.3s; }
+    .glass { backdrop-filter: blur(16px); background: rgba(0,0,0,0.3); }
+    .glass-dark { backdrop-filter: blur(20px); background: rgba(16,28,34,0.9); }
+    .fullscreen-btn { transition: all 0.2s; }
+    .seek-indicator { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; padding: 0.5rem 1rem; border-radius: 2rem; display: flex; align-items: center; gap: 0.5rem; z-index: 60; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
+    .seek-indicator.show { opacity: 1; }
+    [contenteditable="true"]:focus { outline: none; }
+  </style>
+</head>
+<body class="bg-[#101c22] text-white min-h-screen flex flex-col relative overflow-hidden">
+
+  <!-- Contenedor principal del reproductor (ocupa toda la pantalla) -->
+  <div id="player-root" class="relative flex-1 flex flex-col">
+
+    <!-- ========== VISTA MINIMIZADA (solo barra inferior) ========== -->
+    <div id="view-minimized" class="flex-1 flex flex-col relative">
+      <!-- Área de contenido de ejemplo (detrás de la barra) -->
+      <div class="flex-1 p-8 overflow-auto opacity-30 pointer-events-none">
+        <h1 class="text-4xl font-bold mb-6">Explora nuevos episodios</h1>
+        <div class="grid grid-cols-3 gap-4">
+          <div class="h-40 bg-slate-800 rounded-2xl"></div><div class="h-40 bg-slate-800 rounded-2xl"></div><div class="h-40 bg-slate-800 rounded-2xl"></div>
+        </div>
+      </div>
+      <!-- Barra fija inferior (persistente) -->
+      <div id="bottom-bar" class="glass-dark border-t border-white/10 absolute bottom-0 left-0 right-0 z-50"></div>
+    </div>
+
+    <!-- ========== VISTA POP-OUT (base para video/audio) ========== -->
+    <div id="view-popout" class="hidden flex-1 flex flex-col absolute inset-0 z-40">
+      <!-- Cabecera del pop-out -->
+      <header class="flex items-center justify-between px-6 h-14 glass border-b border-white/10">
+        <button id="close-popout" class="p-2 hover:bg-white/10 rounded-lg"><span class="material-symbols-outlined">expand_more</span></button>
+        <div class="flex bg-black/40 p-1 rounded-full">
+          <button id="mode-video" class="flex items-center gap-1 px-4 py-1 rounded-full text-sm font-bold transition-all"><span class="material-symbols-outlined text-lg">videocam</span> Video</button>
+          <button id="mode-audio" class="flex items-center gap-1 px-4 py-1 rounded-full text-sm font-bold transition-all"><span class="material-symbols-outlined text-lg">audiotrack</span> Audio</button>
+        </div>
+        <div class="w-10"></div>
+      </header>
+      <!-- Contenedor principal: media + panel lateral -->
+      <div id="popout-main" class="flex-1 flex relative">
+        <div id="media-content" class="media-content w-full h-full flex items-center justify-center relative transition-all duration-300" style="background-size: cover; background-position: center;">
+          <!-- Video / Cover se inyectan aquí -->
+          <video id="popout-video" class="max-w-full max-h-full object-contain hidden" playsinline></video>
+          <img id="popout-cover" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl hidden" alt="cover">
+          <button id="fullscreen-btn" class="absolute bottom-4 right-4 p-3 bg-black/40 hover:bg-black/60 rounded-lg border border-white/20 z-10 hidden"><span class="material-symbols-outlined">fullscreen</span></button>
+        </div>
+        <!-- Panel lateral (se abre bajo demanda) -->
+        <div id="side-panel" class="side-panel w-0 bg-black/60 backdrop-blur-xl border-l border-white/10 overflow-hidden transition-all duration-300">
+          <div class="h-full flex flex-col p-4">
+            <!-- Cabecera del panel (episodio actual + mini controles) -->
+            <div class="flex items-center gap-3 pb-4 border-b border-white/10">
+              <img id="panel-cover" class="w-12 h-12 rounded-lg object-cover" src="" alt="">
+              <div class="flex-1 min-w-0">
+                <div class="font-medium truncate" id="panel-title"></div>
+                <div class="text-xs text-slate-400 truncate" id="panel-author"></div>
+              </div>
+              <button id="panel-playpause" class="p-2 bg-primary rounded-full"><span class="material-symbols-outlined text-2xl fill-1">pause</span></button>
+            </div>
+            <!-- Pestañas del panel -->
+            <div class="flex items-center justify-between mt-2">
+              <div class="flex gap-4 text-sm font-medium">
+                <button data-panel-tab="queue" class="tab-btn text-primary border-b-2 border-primary pb-1">A continuación</button>
+                <button data-panel-tab="saved" class="tab-btn text-slate-400 pb-1">Guardados</button>
+                <button data-panel-tab="info" class="tab-btn text-slate-400 pb-1">Info/Letra</button>
+              </div>
+              <button id="close-panel" class="p-1"><span class="material-symbols-outlined">close</span></button>
+            </div>
+            <!-- Contenido dinámico del panel -->
+            <div id="panel-content" class="flex-1 overflow-y-auto mt-4 custom-scroll"></div>
+          </div>
+        </div>
+      </div>
+      <!-- La misma barra inferior se inyecta aquí también (reutilizada) -->
+      <div id="popout-bottom-bar" class="glass-dark border-t border-white/10"></div>
+    </div>
+
+    <!-- ========== VISTA FULLSCREEN ========== -->
+    <div id="view-fullscreen" class="hidden fixed inset-0 z-[100] bg-black flex flex-col">
+      <!-- Video/cover a pantalla completa -->
+      <div class="absolute inset-0 flex items-center justify-center">
+        <video id="fullscreen-video" class="w-full h-full object-contain" playsinline></video>
+        <img id="fullscreen-cover" class="w-full h-full object-contain hidden" alt="">
+      </div>
+      <!-- Overlay con controles -->
+      <div class="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/80 pointer-events-none"></div>
+      <!-- Título superior -->
+      <div class="absolute top-8 left-8 text-2xl font-bold z-10" id="fullscreen-title">Título del episodio</div>
+      <!-- Controles centrales -->
+      <div class="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 flex items-center gap-6 z-20">
+        <button class="text-white/70 hover:text-white text-4xl" id="fs-shuffle"><span class="material-symbols-outlined">shuffle</span></button>
+        <button class="text-white text-5xl" id="fs-prev"><span class="material-symbols-outlined">skip_previous</span></button>
+        <button class="text-white text-5xl" id="fs-back"><span class="material-symbols-outlined">replay_10</span></button>
+        <button class="w-20 h-20 bg-primary rounded-full flex items-center justify-center text-6xl hover:scale-105 transition" id="fs-playpause"><span class="material-symbols-outlined fill-1">pause</span></button>
+        <button class="text-white text-5xl" id="fs-forward"><span class="material-symbols-outlined">forward_10</span></button>
+        <button class="text-white text-5xl" id="fs-next"><span class="material-symbols-outlined">skip_next</span></button>
+        <button class="text-primary text-4xl" id="fs-repeat"><span class="material-symbols-outlined">repeat</span></button>
+      </div>
+      <!-- Barra inferior -->
+      <div class="absolute bottom-8 left-0 right-0 px-8 z-20">
+        <div class="flex items-center justify-between text-sm mb-2">
+          <span id="fs-current">0:00</span>
+          <span id="fs-duration">0:00</span>
+        </div>
+        <div class="relative h-1 bg-white/20 rounded-full w-full cursor-pointer" id="fs-progress-container">
+          <div class="absolute top-0 left-0 h-1 bg-primary rounded-full" id="fs-progress-fill" style="width: 0%"></div>
+        </div>
+        <div class="flex items-center justify-between mt-4">
+          <div class="flex gap-4">
+            <button class="flex items-center gap-1 text-white" id="fs-speed"><span class="text-sm">1x</span><span class="material-symbols-outlined">speed</span></button>
+          </div>
+          <div class="flex items-center gap-6">
+            <div class="flex items-center gap-2 group/vol">
+              <button id="fs-volume-btn"><span class="material-symbols-outlined">volume_up</span></button>
+              <div class="w-20 h-1 bg-white/20 rounded-full relative">
+                <div class="absolute top-0 left-0 h-1 bg-primary rounded-full" id="fs-volume-fill" style="width: 70%"></div>
+              </div>
+            </div>
+            <button id="fs-exit"><span class="material-symbols-outlined">fullscreen_exit</span></button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Indicadores de avance/retroceso (flotantes) -->
+    <div id="seek-indicator-left" class="seek-indicator left-10"><span class="material-symbols-outlined">forward_10</span> <span id="seek-value">0s</span></div>
+    <div id="seek-indicator-right" class="seek-indicator right-10"><span class="material-symbols-outlined">replay_10</span> <span id="seek-value-right">0s</span></div>
+  </div>
+
+  <script>
+    (function(){
+      // ---------- CONFIGURACIÓN GLOBAL ----------
+      const PlayerState = {
+        mode: 'minimized', // minimized, popout-video, popout-audio, fullscreen
+        episode: null,
+        playlist: [], // cola actual
+        history: [], // episodios reproducidos
+        favorites: [], // favoritos (ids o episodios completos)
+        saved: [], // lista guardada (añadidos a lista)
+        currentTime: 0,
+        duration: 0,
+        paused: true,
+        volume: 0.7,
+        speed: 1.0,
+        repeat: 'off', // off, one, all
+        shuffle: false,
+        timer: null, // { endTime: timestamp, type: 'countdown'|'end' }
+        panelOpen: false,
+        panelTab: 'queue',
+        // elementos DOM
+        elements: {},
+      };
+
+      // ---------- EPISODIO DE EJEMPLO (se puede reemplazar vía API) ----------
+      const defaultEpisode = {
+        id: 'ep123',
+        title: 'El futuro de la IA generativa',
+        author: 'Tech Podcast',
+        cover: 'https://picsum.photos/400/400?random=1',
+        mp3: 'https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3',
+        mp4: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+        description: 'En este episodio exploramos cómo la inteligencia artificial está transformando el diseño.',
+        detailsUrl: '#',
+        subtitlesUrl: '', // opcional
+        gender: 'podcast', // music, podcast, false
+        serie: { title: 'Tech Talks', cover: 'https://picsum.photos/200/200?random=2', episodes: [] }
+      };
+
+      // ---------- UTILERÍAS ----------
+      function formatTime(sec) {
+        if (isNaN(sec)) return '0:00';
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+        return h > 0 ? `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` : `${m}:${s.toString().padStart(2,'0')}`;
+      }
+
+      // Extraer color dominante (simulado con un color fijo + variación)
+      function getDynamicColor(imgUrl) {
+        // En un caso real usarías ColorThief o similar, aquí retornamos un degradado
+        return 'linear-gradient(135deg, #0da6f2 0%, #101c22 80%)';
+      }
+
+      // Actualizar fondo dinámico
+      function updateDynamicBackground(coverUrl) {
+        const style = document.createElement('style');
+        style.innerHTML = `
+          .dynamic-bg { background: ${getDynamicColor(coverUrl)}; }
+        `;
+        document.head.appendChild(style);
+      }
+
+      // ---------- PERSISTENCIA LOCALSTORAGE ----------
+      function saveState() {
+        const toSave = {
+          episode: PlayerState.episode,
+          currentTime: PlayerState.currentTime,
+          paused: PlayerState.paused,
+          volume: PlayerState.volume,
+          speed: PlayerState.speed,
+          repeat: PlayerState.repeat,
+          shuffle: PlayerState.shuffle,
+          favorites: PlayerState.favorites,
+          saved: PlayerState.saved,
+          history: PlayerState.history.slice(-50), // últimos 50
+        };
+        localStorage.setItem('playerState', JSON.stringify(toSave));
+      }
+
+      function loadState() {
+        const saved = localStorage.getItem('playerState');
+        if (saved) {
+          try {
+            const data = JSON.parse(saved);
+            PlayerState.episode = data.episode || defaultEpisode;
+            PlayerState.currentTime = data.currentTime || 0;
+            PlayerState.paused = data.paused !== undefined ? data.paused : true;
+            PlayerState.volume = data.volume || 0.7;
+            PlayerState.speed = data.speed || 1.0;
+            PlayerState.repeat = data.repeat || 'off';
+            PlayerState.shuffle = data.shuffle || false;
+            PlayerState.favorites = data.favorites || [];
+            PlayerState.saved = data.saved || [];
+            PlayerState.history = data.history || [];
+          } catch (e) { console.warn('Error loading state', e); }
+        } else {
+          PlayerState.episode = defaultEpisode;
+        }
+        if (!PlayerState.episode) PlayerState.episode = defaultEpisode;
+      }
+
+      // ---------- REPRODUCTOR DE AUDIO/VIDEO ----------
+      let audioElement = new Audio();
+      let videoElement = document.getElementById('popout-video');
+      let fullscreenVideo = document.getElementById('fullscreen-video');
+      let fullscreenCover = document.getElementById('fullscreen-cover');
+      let popoutCover = document.getElementById('popout-cover');
+
+      function initMedia() {
+        audioElement.volume = PlayerState.volume;
+        audioElement.playbackRate = PlayerState.speed;
+        videoElement.volume = PlayerState.volume;
+        videoElement.playbackRate = PlayerState.speed;
+        fullscreenVideo.volume = PlayerState.volume;
+        fullscreenVideo.playbackRate = PlayerState.speed;
+
+        // Eventos comunes
+        [audioElement, videoElement, fullscreenVideo].forEach(media => {
+          media.addEventListener('timeupdate', updateProgress);
+          media.addEventListener('durationchange', updateDuration);
+          media.addEventListener('ended', handleEnded);
+        });
+      }
+
+      function loadEpisode(ep, autoplay = true) {
+        if (!ep) return;
+        PlayerState.episode = ep;
+        // Actualizar fuentes
+        if (ep.mp3) audioElement.src = ep.mp3;
+        if (ep.mp4) {
+          videoElement.src = ep.mp4;
+          fullscreenVideo.src = ep.mp4;
+        }
+        // Actualizar covers
+        document.querySelectorAll('.episode-cover').forEach(el => el.style.backgroundImage = `url(${ep.cover})`);
+        popoutCover.src = ep.cover;
+        fullscreenCover.src = ep.cover;
+        document.getElementById('fullscreen-title').innerText = ep.title;
+        // Actualizar fondo dinámico
+        updateDynamicBackground(ep.cover);
+        // Media Session API
+        if ('mediaSession' in navigator) {
+          navigator.mediaSession.metadata = new MediaMetadata({
+            title: ep.title,
+            artist: ep.author,
+            album: ep.serie?.title || 'Podcast',
+            artwork: [{ src: ep.cover, sizes: '512x512', type: 'image/jpeg' }]
+          });
+          navigator.mediaSession.setActionHandler('play', () => play());
+          navigator.mediaSession.setActionHandler('pause', () => pause());
+          navigator.mediaSession.setActionHandler('previoustrack', () => previous());
+          navigator.mediaSession.setActionHandler('nexttrack', () => next());
+          navigator.mediaSession.setActionHandler('seekbackward', (details) => seekBy(-(details.seekOffset || 15)));
+          navigator.mediaSession.setActionHandler('seekforward', (details) => seekBy(details.seekOffset || 15));
+        }
+        if (autoplay) play();
+        saveState();
+      }
+
+      function play() {
+        if (!PlayerState.episode) return;
+        if (PlayerState.mode.includes('popout') && PlayerState.mode === 'popout-video') {
+          videoElement.play();
+        } else if (PlayerState.mode === 'fullscreen') {
+          fullscreenVideo.play();
+        } else {
+          audioElement.play();
+        }
+        PlayerState.paused = false;
+        updatePlayPauseIcons();
+        saveState();
+      }
+
+      function pause() {
+        audioElement.pause();
+        videoElement.pause();
+        fullscreenVideo.pause();
+        PlayerState.paused = true;
+        updatePlayPauseIcons();
+        saveState();
+      }
+
+      function togglePlay() {
+        PlayerState.paused ? play() : pause();
+      }
+
+      function seekTo(seconds) {
+        if (PlayerState.mode.includes('popout') && PlayerState.mode === 'popout-video') videoElement.currentTime = seconds;
+        else if (PlayerState.mode === 'fullscreen') fullscreenVideo.currentTime = seconds;
+        else audioElement.currentTime = seconds;
+        PlayerState.currentTime = seconds;
+      }
+
+      function seekBy(seconds) {
+        let newTime = 0;
+        if (PlayerState.mode.includes('popout') && PlayerState.mode === 'popout-video') newTime = videoElement.currentTime + seconds;
+        else if (PlayerState.mode === 'fullscreen') newTime = fullscreenVideo.currentTime + seconds;
+        else newTime = audioElement.currentTime + seconds;
+        if (newTime < 0) newTime = 0;
+        if (newTime > PlayerState.duration) newTime = PlayerState.duration;
+        seekTo(newTime);
+        // Mostrar indicador
+        const indicator = seconds > 0 ? document.getElementById('seek-indicator-left') : document.getElementById('seek-indicator-right');
+        const valSpan = seconds > 0 ? document.getElementById('seek-value') : document.getElementById('seek-value-right');
+        valSpan.innerText = Math.abs(seconds) + 's';
+        indicator.classList.add('show');
+        setTimeout(() => indicator.classList.remove('show'), 800);
+      }
+
+      function previous() {
+        // Lógica simplificada: si hay historial, reproducir anterior
+        if (PlayerState.history.length > 1) {
+          const prevEp = PlayerState.history[PlayerState.history.length - 2];
+          loadEpisode(prevEp);
+        } else {
+          // retroceder al inicio
+          seekTo(0);
+        }
+      }
+
+      function next() {
+        // Si hay cola o recomendados
+        if (PlayerState.playlist.length > 0) {
+          const nextEp = PlayerState.playlist.shift();
+          loadEpisode(nextEp);
+        } else {
+          // Buscar en la serie o aleatorio
+          // (simplificado)
+          alert('No hay más episodios en la cola');
+        }
+      }
+
+      function handleEnded() {
+        if (PlayerState.repeat === 'one') {
+          seekTo(0);
+          play();
+        } else if (PlayerState.repeat === 'all') {
+          next(); // asumiendo que next maneja ciclo
+        } else {
+          // pasar al siguiente si existe
+          next();
+        }
+      }
+
+      function updateProgress() {
+        let media = null;
+        if (PlayerState.mode.includes('popout') && PlayerState.mode === 'popout-video') media = videoElement;
+        else if (PlayerState.mode === 'fullscreen') media = fullscreenVideo;
+        else media = audioElement;
+        if (!media) return;
+        PlayerState.currentTime = media.currentTime;
+        PlayerState.duration = media.duration;
+        const percent = (media.currentTime / media.duration) * 100 || 0;
+        // Actualizar barras de progreso en todas las vistas
+        document.querySelectorAll('.progress-fill').forEach(el => el.style.width = percent + '%');
+        document.querySelectorAll('.progress-time-current').forEach(el => el.innerText = formatTime(media.currentTime));
+        document.querySelectorAll('.progress-time-total').forEach(el => el.innerText = formatTime(media.duration));
+      }
+
+      function updateDuration() {
+        let media = null;
+        if (PlayerState.mode.includes('popout') && PlayerState.mode === 'popout-video') media = videoElement;
+        else if (PlayerState.mode === 'fullscreen') media = fullscreenVideo;
+        else media = audioElement;
+        if (!media) return;
+        PlayerState.duration = media.duration;
+      }
+
+      function updatePlayPauseIcons() {
+        const icon = PlayerState.paused ? 'play_arrow' : 'pause';
+        document.querySelectorAll('.play-pause-icon').forEach(el => el.innerText = icon);
+      }
+
+      // ---------- CAMBIO DE VISTAS ----------
+      function setMode(newMode) {
+        const oldMode = PlayerState.mode;
+        PlayerState.mode = newMode;
+        document.getElementById('view-minimized').classList.add('hidden');
+        document.getElementById('view-popout').classList.add('hidden');
+        document.getElementById('view-fullscreen').classList.add('hidden');
+        if (newMode === 'minimized') {
+          document.getElementById('view-minimized').classList.remove('hidden');
+          // Inyectar barra inferior en minimized
+          renderBottomBar('bottom-bar');
+        } else if (newMode === 'popout-video' || newMode === 'popout-audio') {
+          document.getElementById('view-popout').classList.remove('hidden');
+          renderBottomBar('popout-bottom-bar');
+          // Actualizar toggle
+          document.getElementById('mode-video').classList.toggle('bg-primary', newMode === 'popout-video');
+          document.getElementById('mode-video').classList.toggle('text-white', newMode === 'popout-video');
+          document.getElementById('mode-audio').classList.toggle('bg-primary', newMode === 'popout-audio');
+          document.getElementById('mode-audio').classList.toggle('text-white', newMode === 'popout-audio');
+          // Mostrar video o cover
+          if (newMode === 'popout-video') {
+            videoElement.classList.remove('hidden');
+            popoutCover.classList.add('hidden');
+            document.getElementById('fullscreen-btn').classList.remove('hidden');
+          } else {
+            videoElement.classList.add('hidden');
+            popoutCover.classList.remove('hidden');
+            document.getElementById('fullscreen-btn').classList.add('hidden');
+          }
+        } else if (newMode === 'fullscreen') {
+          document.getElementById('view-fullscreen').classList.remove('hidden');
+          // Sincronizar video
+          if (PlayerState.episode?.mp4) {
+            fullscreenVideo.classList.remove('hidden');
+            fullscreenCover.classList.add('hidden');
+            fullscreenVideo.currentTime = PlayerState.currentTime;
+          } else {
+            fullscreenVideo.classList.add('hidden');
+            fullscreenCover.classList.remove('hidden');
+          }
+          if (!PlayerState.paused) fullscreenVideo.play();
+        }
+        saveState();
+      }
+
+      // Renderizar la barra inferior (reutilizable)
+      function renderBottomBar(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.innerHTML = `
+          <div class="max-w-[1920px] mx-auto grid grid-cols-3 items-center h-24 px-6 gap-4 relative">
+            <div class="absolute top-0 left-0 right-0 h-1 bg-slate-800 progress-container cursor-pointer group" id="progress-container">
+              <div class="h-full bg-primary relative progress-fill" style="width: ${(PlayerState.currentTime/PlayerState.duration*100)||0}%">
+                <div class="progress-thumb absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg opacity-0"></div>
+              </div>
+            </div>
+            <!-- Bloque izquierdo -->
+            <div class="flex items-center gap-4 min-w-0">
+              <div class="relative group cursor-pointer" id="cover-popout-trigger">
+                <img src="${PlayerState.episode?.cover}" class="size-14 rounded-lg object-cover border border-white/10">
+                <div class="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 rounded-lg flex items-center justify-center"><span class="material-symbols-outlined">expand_less</span></div>
+              </div>
+              <div class="flex flex-col min-w-0">
+                <h3 class="font-medium truncate text-sm" id="title-episode">${PlayerState.episode?.title}</h3>
+                <p class="text-xs text-slate-400 truncate">${PlayerState.episode?.author}</p>
+              </div>
+              <button class="p-1.5 rounded-full hover:bg-slate-800" title="Añadir a lista"><span class="material-symbols-outlined text-xl">add_circle</span></button>
+              <div class="relative group">
+                <button class="p-1.5 rounded-full hover:bg-slate-800"><span class="material-symbols-outlined">more_vert</span></button>
+                <div class="absolute bottom-full left-0 mb-2 w-48 bg-slate-900 border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all p-2">
+                  <div class="flex gap-1">
+                    <div class="flex-1 bg-slate-800 p-2 rounded-lg flex flex-col items-center cursor-pointer" id="speed-btn-panel">
+                      <span class="material-symbols-outlined text-sm">speed</span><span class="text-[10px]">Velocidad</span>
+                    </div>
+                    <div class="flex-1 bg-slate-800 p-2 rounded-lg flex flex-col items-center cursor-pointer" id="timer-btn-panel">
+                      <span class="material-symbols-outlined text-sm">timer</span><span class="text-[10px]">Temporizador</span>
+                    </div>
+                  </div>
+                  <hr class="border-slate-800 my-1">
+                  <button class="flex items-center gap-3 px-3 py-2 text-xs hover:bg-slate-800 w-full rounded"><span class="material-symbols-outlined text-sm">download</span> Descargar</button>
+                  <button class="flex items-center gap-3 px-3 py-2 text-xs hover:bg-slate-800 w-full rounded"><span class="material-symbols-outlined text-sm">share</span> Compartir</button>
+                  <button class="flex items-center gap-3 px-3 py-2 text-xs hover:bg-slate-800 w-full rounded"><span class="material-symbols-outlined text-sm">info</span> Ver info</button>
+                </div>
+              </div>
+            </div>
+            <!-- Bloque central: controles -->
+            <div class="flex flex-col items-center">
+              <div class="flex items-center gap-4">
+                <button class="text-xs border border-slate-600 rounded px-1 py-0.5 hover:border-slate-400" id="speed-btn">${PlayerState.speed}x</button>
+                <button id="prev-btn"><span class="material-symbols-outlined">skip_previous</span></button>
+                <button id="back15"><span class="material-symbols-outlined">replay_10</span></button>
+                <button id="playpause-btn" class="size-11 rounded-full bg-white text-black flex items-center justify-center hover:scale-105 transition"><span class="material-symbols-outlined text-3xl play-pause-icon">${PlayerState.paused ? 'play_arrow' : 'pause'}</span></button>
+                <button id="forward15"><span class="material-symbols-outlined">forward_10</span></button>
+                <button id="next-btn"><span class="material-symbols-outlined">skip_next</span></button>
+                <button id="repeat-btn"><span class="material-symbols-outlined">${PlayerState.repeat === 'one' ? 'repeat_one' : PlayerState.repeat === 'all' ? 'repeat' : 'repeat'}</span></button>
+              </div>
+            </div>
+            <!-- Bloque derecho: acciones -->
+            <div class="flex items-center justify-end gap-1">
+              <button class="p-2 hover:bg-slate-800 rounded-full" id="fav-btn"><span class="material-symbols-outlined ${PlayerState.favorites.includes(PlayerState.episode?.id) ? 'text-red-500 fill-1' : ''}">favorite</span></button>
+              <button class="p-2 hover:bg-slate-800 rounded-full" id="timer-btn"><span class="material-symbols-outlined">timer</span></button>
+              <button class="p-2 hover:bg-slate-800 rounded-full" id="cc-btn"><span class="material-symbols-outlined">${PlayerState.episode?.gender === 'music' ? 'mic' : PlayerState.episode?.gender === 'podcast' ? 'closed_caption' : 'info'}</span></button>
+              <button class="p-2 hover:bg-slate-800 rounded-full" id="queue-btn"><span class="material-symbols-outlined">queue_music</span></button>
+              <button class="p-2 hover:bg-slate-800 rounded-full" id="saved-btn"><span class="material-symbols-outlined">bookmark</span></button>
+              <div class="flex items-center volume-hover ml-2 pl-2 border-l border-slate-800">
+                <button class="p-2" id="volume-btn"><span class="material-symbols-outlined">${PlayerState.volume === 0 ? 'volume_off' : 'volume_up'}</span></button>
+                <div class="volume-slider flex items-center px-2">
+                  <div class="h-1 w-full bg-slate-700 rounded-full overflow-hidden relative" style="width: 80px;">
+                    <div class="h-full bg-slate-300" style="width: ${PlayerState.volume*100}%;" id="volume-fill"></div>
+                    <input type="range" min="0" max="1" step="0.01" value="${PlayerState.volume}" class="absolute top-0 left-0 w-full h-full opacity-0 cursor-pointer" id="volume-range">
+                  </div>
+                </div>
+              </div>
+              <button class="p-2 ml-2 hover:text-primary rounded-lg" id="popout-btn"><span class="material-symbols-outlined">picture_in_picture_alt</span></button>
+            </div>
+          </div>
+        `;
+        // Asignar eventos después de inyectar HTML
+        attachBottomBarEvents(containerId);
+      }
+
+      function attachBottomBarEvents(containerId) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        container.querySelector('#playpause-btn')?.addEventListener('click', togglePlay);
+        container.querySelector('#prev-btn')?.addEventListener('click', previous);
+        container.querySelector('#next-btn')?.addEventListener('click', next);
+        container.querySelector('#back15')?.addEventListener('click', () => seekBy(-15));
+        container.querySelector('#forward15')?.addEventListener('click', () => seekBy(15));
+        container.querySelector('#repeat-btn')?.addEventListener('click', cycleRepeat);
+        container.querySelector('#speed-btn')?.addEventListener('click', () => openPanel('speed'));
+        container.querySelector('#timer-btn')?.addEventListener('click', () => openPanel('timer'));
+        container.querySelector('#queue-btn')?.addEventListener('click', () => openPanel('queue'));
+        container.querySelector('#saved-btn')?.addEventListener('click', () => openPanel('saved'));
+        container.querySelector('#cc-btn')?.addEventListener('click', () => openPanel('info'));
+        container.querySelector('#fav-btn')?.addEventListener('click', toggleFavorite);
+        container.querySelector('#popout-btn')?.addEventListener('click', () => setMode('popout-video'));
+        container.querySelector('#cover-popout-trigger')?.addEventListener('click', () => setMode('popout-video'));
+        container.querySelector('#progress-container')?.addEventListener('click', (e) => {
+          const rect = e.currentTarget.getBoundingClientRect();
+          const percent = (e.clientX - rect.left) / rect.width;
+          seekTo(percent * PlayerState.duration);
+        });
+        container.querySelector('#volume-range')?.addEventListener('input', (e) => {
+          const val = parseFloat(e.target.value);
+          PlayerState.volume = val;
+          audioElement.volume = val;
+          videoElement.volume = val;
+          fullscreenVideo.volume = val;
+          document.getElementById('volume-fill').style.width = val*100 + '%';
+        });
+      }
+
+      function cycleRepeat() {
+        const states = ['off', 'one', 'all'];
+        const idx = states.indexOf(PlayerState.repeat);
+        PlayerState.repeat = states[(idx + 1) % states.length];
+        document.querySelectorAll('#repeat-btn .material-symbols-outlined').forEach(icon => {
+          icon.innerText = PlayerState.repeat === 'one' ? 'repeat_one' : 'repeat';
+        });
+        saveState();
+      }
+
+      function toggleFavorite() {
+        const id = PlayerState.episode?.id;
+        if (!id) return;
+        const idx = PlayerState.favorites.indexOf(id);
+        if (idx === -1) PlayerState.favorites.push(id);
+        else PlayerState.favorites.splice(idx, 1);
+        document.querySelectorAll('#fav-btn .material-symbols-outlined').forEach(icon => {
+          icon.classList.toggle('text-red-500', idx === -1);
+        });
+        saveState();
+      }
+
+      // ---------- PANEL LATERAL ----------
+      function openPanel(tab) {
+        if (!PlayerState.episode) return;
+        PlayerState.panelOpen = true;
+        PlayerState.panelTab = tab;
+        document.getElementById('side-panel').style.width = '40%';
+        document.querySelector('#media-content').classList.add('w-3/5');
+        // Actualizar pestañas
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+          const t = btn.dataset.panelTab;
+          btn.classList.toggle('text-primary', t === tab);
+          btn.classList.toggle('border-b-2', t === tab);
+        });
+        renderPanelContent(tab);
+      }
+
+      function closePanel() {
+        PlayerState.panelOpen = false;
+        document.getElementById('side-panel').style.width = '0';
+        document.querySelector('#media-content').classList.remove('w-3/5');
+      }
+
+      function renderPanelContent(tab) {
+        const contentDiv = document.getElementById('panel-content');
+        if (!contentDiv) return;
+        if (tab === 'speed') {
+          contentDiv.innerHTML = `
+            <div class="p-2">
+              <h4 class="font-medium mb-4">Velocidad de reproducción</h4>
+              <input type="range" min="0.5" max="2" step="0.05" value="${PlayerState.speed}" class="w-full accent-primary" id="speed-slider">
+              <div class="flex justify-between mt-2 text-xs">
+                <span>0.5x</span><span>1x</span><span>2x</span>
+              </div>
+              <div class="grid grid-cols-3 gap-2 mt-4">
+                ${[0.5,0.75,1,1.25,1.5,2].map(s => `<button class="speed-preset p-2 bg-slate-800 rounded hover:bg-slate-700" data-speed="${s}">${s}x</button>`).join('')}
+              </div>
+            </div>
+          `;
+          document.getElementById('speed-slider')?.addEventListener('input', (e) => {
+            const sp = parseFloat(e.target.value);
+            PlayerState.speed = sp;
+            audioElement.playbackRate = sp;
+            videoElement.playbackRate = sp;
+            fullscreenVideo.playbackRate = sp;
+            document.querySelectorAll('#speed-btn').forEach(el => el.innerText = sp.toFixed(2) + 'x');
+          });
+          document.querySelectorAll('.speed-preset').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const sp = parseFloat(btn.dataset.speed);
+              PlayerState.speed = sp;
+              audioElement.playbackRate = sp;
+              videoElement.playbackRate = sp;
+              fullscreenVideo.playbackRate = sp;
+              document.getElementById('speed-slider').value = sp;
+              document.querySelectorAll('#speed-btn').forEach(el => el.innerText = sp.toFixed(2) + 'x');
+            });
+          });
+        } else if (tab === 'timer') {
+          if (PlayerState.timer) {
+            // Mostrar contador regresivo
+            const remaining = Math.max(0, (PlayerState.timer.endTime - Date.now()) / 1000);
+            contentDiv.innerHTML = `
+              <div class="text-center py-8">
+                <div class="text-5xl font-bold text-primary mb-6">${formatTime(remaining)}</div>
+                <button id="cancel-timer" class="bg-white text-black px-6 py-2 rounded-full font-medium mr-2">Desactivar</button>
+                <button id="add5min" class="border border-white px-6 py-2 rounded-full font-medium">+5 min</button>
+              </div>
+            `;
+            document.getElementById('cancel-timer')?.addEventListener('click', () => { PlayerState.timer = null; closePanel(); });
+            document.getElementById('add5min')?.addEventListener('click', () => {
+              if (PlayerState.timer) PlayerState.timer.endTime += 5*60*1000;
+            });
+          } else {
+            contentDiv.innerHTML = `
+              <div class="p-2">
+                <h4 class="font-medium mb-4">Temporizador de apagado</h4>
+                <div class="space-y-2">
+                  ${[5,10,15,30,45,60].map(m => `<button class="timer-option block w-full text-left p-3 bg-slate-800 rounded hover:bg-slate-700" data-min="${m}">${m} minutos</button>`).join('')}
+                  <button class="timer-option block w-full text-left p-3 bg-slate-800 rounded hover:bg-slate-700" data-end="end">Fin del episodio</button>
+                </div>
+              </div>
+            `;
+            document.querySelectorAll('.timer-option').forEach(btn => {
+              btn.addEventListener('click', () => {
+                const min = btn.dataset.min;
+                if (min) {
+                  const endTime = Date.now() + parseInt(min)*60*1000;
+                  PlayerState.timer = { endTime, type: 'countdown' };
+                } else if (btn.dataset.end === 'end') {
+                  // basado en el progreso actual
+                  const remaining = (PlayerState.duration - PlayerState.currentTime) * 1000;
+                  PlayerState.timer = { endTime: Date.now() + remaining, type: 'end' };
+                }
+                openPanel('timer'); // refrescar
+              });
+            });
+          }
+        } else if (tab === 'queue') {
+          contentDiv.innerHTML = `<div class="p-2 text-slate-400">Cola de reproducción (simulada)</div>`;
+        } else if (tab === 'saved') {
+          contentDiv.innerHTML = `<div class="p-2 text-slate-400">Guardados y favoritos (${PlayerState.favorites.length} favoritos)</div>`;
+        } else if (tab === 'info') {
+          contentDiv.innerHTML = `<div class="p-2">${PlayerState.episode?.description || 'Sin descripción'}</div>`;
+        }
+      }
+
+      // ---------- EVENTOS GLOBALES ----------
+      document.addEventListener('DOMContentLoaded', () => {
+        loadState();
+        initMedia();
+        setMode('minimized');
+        loadEpisode(PlayerState.episode, false);
+        if (!PlayerState.paused) play();
+
+        // Botones de cierre de pop-out y fullscreen
+        document.getElementById('close-popout').addEventListener('click', () => setMode('minimized'));
+        document.getElementById('mode-video').addEventListener('click', () => setMode('popout-video'));
+        document.getElementById('mode-audio').addEventListener('click', () => setMode('popout-audio'));
+        document.getElementById('fullscreen-btn').addEventListener('click', () => setMode('fullscreen'));
+        document.getElementById('fs-exit').addEventListener('click', () => setMode('popout-video'));
+
+        document.getElementById('close-panel').addEventListener('click', closePanel);
+
+        // Panel desde barra
+        document.getElementById('speed-btn-panel')?.addEventListener('click', () => openPanel('speed'));
+        document.getElementById('timer-btn-panel')?.addEventListener('click', () => openPanel('timer'));
+
+        // Actualizar tiempo en fullscreen
+        setInterval(() => {
+          if (PlayerState.mode === 'fullscreen') {
+            document.getElementById('fs-current').innerText = formatTime(PlayerState.currentTime);
+            document.getElementById('fs-duration').innerText = formatTime(PlayerState.duration);
+            document.getElementById('fs-progress-fill').style.width = (PlayerState.currentTime / PlayerState.duration * 100) + '%';
+          }
+        }, 500);
+
+        // Comprobar temporizador cada segundo
+        setInterval(() => {
+          if (PlayerState.timer) {
+            if (Date.now() >= PlayerState.timer.endTime) {
+              pause();
+              PlayerState.timer = null;
+              closePanel();
+            }
+          }
+        }, 1000);
+      });
+
+      // ---------- API EXTERNA (para inyectar episodios) ----------
+      window.PlayerAPI = {
+        loadEpisode: (ep) => loadEpisode(ep, true),
+        addToFavorites: (epId) => { if (!PlayerState.favorites.includes(epId)) PlayerState.favorites.push(epId); saveState(); },
+        addToSavedList: (ep) => { PlayerState.saved.push(ep); saveState(); },
+        getFavorites: () => PlayerState.favorites,
+        getSavedList: () => PlayerState.saved,
+        getHistory: () => PlayerState.history,
+        play: () => play(),
+        pause: () => pause(),
+        togglePlay: togglePlay,
+        next,
+        previous,
+      };
+
+    })();
+  </script>
+  <!-- Estilos adicionales -->
+  <style>
+    .fill-1 { font-variation-settings: 'FILL' 1; }
+    .custom-scroll::-webkit-scrollbar { width: 6px; }
+    .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+  </style>
+</body>
+</html>
