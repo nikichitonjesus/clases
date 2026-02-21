@@ -2,28 +2,27 @@
 <html lang="es" class="dark">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Reproductor Multimedia Profesional</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Reproductor Profesional (Escritorio + Móvil)</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0,1" rel="stylesheet" />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <style>
     * { font-family: 'Inter', sans-serif; }
+    /* Utilidades generales */
     .volume-hover:hover .volume-slider { width: 80px; opacity: 1; }
     .volume-slider { width: 0; opacity: 0; transition: all 0.2s; }
     .progress-thumb { opacity: 0; transition: opacity 0.2s; }
     .progress-container:hover .progress-thumb { opacity: 1; }
-    .panel-open .media-content { width: 60%; }
-    .panel-open .side-panel { width: 40%; }
-    .side-panel { transition: width 0.3s; }
     .glass { backdrop-filter: blur(16px); background: rgba(0,0,0,0.3); }
     .glass-dark { backdrop-filter: blur(20px); background: rgba(16,28,34,0.9); }
     .seek-indicator { position: absolute; top: 50%; transform: translateY(-50%); background: rgba(0,0,0,0.7); color: white; padding: 0.5rem 1rem; border-radius: 2rem; display: flex; align-items: center; gap: 0.5rem; z-index: 60; pointer-events: none; opacity: 0; transition: opacity 0.2s; }
     .seek-indicator.show { opacity: 1; }
-    .lyrics-container { height: 100%; overflow-y: auto; white-space: pre-line; line-height: 1.6; }
-    .lyrics-line { padding: 0.25rem 0; transition: all 0.2s; }
+    .fill-1 { font-variation-settings: 'FILL' 1; }
+    /* Estilos para letra/transcripción en audio */
+    .lyrics-container { height: 100%; overflow-y: auto; scroll-behavior: smooth; }
+    .lyrics-line { transition: all 0.2s; }
     .lyrics-line.active { color: #0da6f2; font-weight: 600; transform: scale(1.02); }
-    .subtitles-overlay { position: absolute; bottom: 20px; left: 0; right: 0; text-align: center; pointer-events: none; color: white; text-shadow: 0 0 8px black; font-size: 1.2rem; background: rgba(0,0,0,0.5); padding: 0.5rem; border-radius: 8px; max-width: 80%; margin: 0 auto; }
     /* Carrusel de velocidad */
     .speed-carousel { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
     .speed-carousel::-webkit-scrollbar { display: none; }
@@ -33,40 +32,45 @@
     .speed-tick.minor .line { height: 10px; }
     .speed-tick span { margin-top: 5px; font-size: 10px; }
     .speed-pointer { position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 0; height: 0; border-left: 6px solid transparent; border-right: 6px solid transparent; border-top: 12px solid #0da6f2; z-index: 1; }
+    /* Móvil: ocultar elementos de escritorio cuando corresponda */
+    .desktop-only { display: flex; }
+    .mobile-only { display: none; }
+    @media (max-width: 768px) {
+      .desktop-only { display: none; }
+      .mobile-only { display: flex; }
+    }
   </style>
 </head>
 <body class="bg-[#101c22] text-white min-h-screen flex flex-col relative overflow-hidden">
-
-  <!-- El reproductor se inyectará aquí mediante JavaScript -->
   <div id="player-root" class="relative flex-1 flex flex-col"></div>
 
   <script>
     (function() {
-      // ---------- ESTADO GLOBAL DEL REPRODUCTOR ----------
+      // ---------- ESTADO GLOBAL ----------
       const PlayerState = {
-        mode: 'minimized', // minimized, popout-video, popout-audio, fullscreen
+        mode: 'minimized',           // minimized, popout-video, popout-audio, fullscreen
         episode: null,
         playlist: [],
         history: [],
-        favorites: [],      // array de IDs
-        savedList: [],       // array de episodios completos (para lista guardada)
+        favorites: [],
+        savedList: [],
         currentTime: 0,
         duration: 0,
         paused: true,
         volume: 0.7,
         speed: 1.0,
-        repeat: 'off',       // off, one, all
+        repeat: 'off',
         shuffle: false,
-        timer: null,         // { endTime: timestamp, type: 'countdown'|'end', baseTime: ... }
+        timer: null,                  // { endTime: timestamp, type: 'countdown'|'end', baseTime: ... }
         panelOpen: false,
         panelTab: 'queue',
         subtitlesEnabled: false,
-        subtitlesTrack: null, // para WebVTT
-        lyricsLines: [],      // para letra/transcripción
+        subtitlesTrack: null,
+        lyricsLines: [],
         activeLyricIndex: -1,
+        seekAccumulator: { back: 0, forward: 0, timeout: null }
       };
 
-      // ---------- EPISODIO POR DEFECTO ----------
       const defaultEpisode = {
         id: 'ep_default',
         title: 'El futuro de la IA generativa',
@@ -76,28 +80,22 @@
         mp4: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
         description: 'Exploramos cómo la inteligencia artificial está transformando el diseño y la creatividad.',
         detailsUrl: '#',
-        subtitlesUrl: '', // opcional, puede ser vtt
-        gender: 'podcast', // music, podcast, false
+        subtitlesUrl: '',
+        gender: 'podcast',             // 'music', 'podcast', 'false'
         serie: { title: 'Tech Talks', cover: '', episodes: [] }
       };
 
-      // ---------- UTILIDADES ----------
-      function formatTime(sec) {
+      // Utilidades
+      const formatTime = (sec) => {
         if (isNaN(sec) || sec === Infinity) return '0:00';
         const h = Math.floor(sec / 3600);
         const m = Math.floor((sec % 3600) / 60);
         const s = Math.floor(sec % 60);
-        if (h > 0) return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
-        return `${m}:${s.toString().padStart(2,'0')}`;
-      }
+        return h > 0 ? `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}` : `${m}:${s.toString().padStart(2,'0')}`;
+      };
 
-      // Simular color dinámico (en un caso real usarías ColorThief)
-      function getDynamicColor(imgUrl) {
-        return 'linear-gradient(135deg, #0da6f2 0%, #101c22 80%)';
-      }
-
-      // ---------- PERSISTENCIA ----------
-      function saveState() {
+      // Persistencia
+      const saveState = () => {
         const toSave = {
           episode: PlayerState.episode,
           currentTime: PlayerState.currentTime,
@@ -108,12 +106,12 @@
           shuffle: PlayerState.shuffle,
           favorites: PlayerState.favorites,
           savedList: PlayerState.savedList,
-          history: PlayerState.history.slice(-50),
+          history: PlayerState.history.slice(-50)
         };
         localStorage.setItem('playerState', JSON.stringify(toSave));
-      }
+      };
 
-      function loadState() {
+      const loadState = () => {
         const saved = localStorage.getItem('playerState');
         if (saved) {
           try {
@@ -132,9 +130,9 @@
         } else {
           PlayerState.episode = defaultEpisode;
         }
-      }
+      };
 
-      // ---------- ELEMENTOS DE MEDIA ----------
+      // Elementos de audio/video
       let audioElement = new Audio();
       let videoElement = document.createElement('video');
       videoElement.playsInline = true;
@@ -143,7 +141,7 @@
       fullscreenVideo.playsInline = true;
       fullscreenVideo.className = 'w-full h-full object-contain';
 
-      function initMedia() {
+      const initMedia = () => {
         audioElement.volume = PlayerState.volume;
         audioElement.playbackRate = PlayerState.speed;
         videoElement.volume = PlayerState.volume;
@@ -156,21 +154,27 @@
           media.addEventListener('durationchange', updateDuration);
           media.addEventListener('ended', handleEnded);
         });
-      }
+      };
 
-      function updateProgress() {
-        let media = getCurrentMedia();
+      const getCurrentMedia = () => {
+        if (PlayerState.mode === 'popout-video') return videoElement;
+        if (PlayerState.mode === 'fullscreen') return fullscreenVideo;
+        return audioElement;
+      };
+
+      const updateProgress = () => {
+        const media = getCurrentMedia();
         if (!media) return;
         PlayerState.currentTime = media.currentTime;
         PlayerState.duration = media.duration;
-        // Actualizar barras de progreso en todas las vistas
+        // Actualizar barras
         document.querySelectorAll('.progress-fill').forEach(el => {
           el.style.width = (media.currentTime / media.duration * 100) + '%';
         });
         document.querySelectorAll('.progress-time-current').forEach(el => el.innerText = formatTime(media.currentTime));
         document.querySelectorAll('.progress-time-total').forEach(el => el.innerText = formatTime(media.duration));
 
-        // Actualizar letra activa si hay
+        // Actualizar letra activa
         if (PlayerState.lyricsLines.length > 0) {
           const idx = PlayerState.lyricsLines.findIndex(line => line.start <= media.currentTime && line.end > media.currentTime);
           if (idx !== PlayerState.activeLyricIndex) {
@@ -179,103 +183,121 @@
           }
         }
 
-        // Verificar temporizador de fin de episodio
+        // Temporizador fin de episodio: actualizar contador si es necesario
         if (PlayerState.timer && PlayerState.timer.type === 'end') {
-          // Se basa en el progreso real: si currentTime >= duration, ended ya disparó handleEnded
-          // Aquí solo actualizamos el contador visual si el panel está abierto
+          PlayerState.timer.endTime = Date.now() + (PlayerState.duration - PlayerState.currentTime) * 1000;
         }
-      }
+      };
 
-      function updateDuration() {
-        let media = getCurrentMedia();
+      const updateDuration = () => {
+        const media = getCurrentMedia();
         if (media) PlayerState.duration = media.duration;
-      }
+      };
 
-      function getCurrentMedia() {
-        if (PlayerState.mode === 'popout-video') return videoElement;
-        if (PlayerState.mode === 'fullscreen') return fullscreenVideo;
-        return audioElement; // minimizado o popout-audio
-      }
-
-      function handleEnded() {
+      const handleEnded = () => {
         if (PlayerState.repeat === 'one') {
           seekTo(0);
           play();
         } else if (PlayerState.repeat === 'all') {
           next();
         } else {
-          next(); // pasar al siguiente si existe
+          next();
         }
-      }
+      };
 
-      // ---------- CONTROL DE REPRODUCCIÓN ----------
-      function play() {
-        let media = getCurrentMedia();
+      // Control básico
+      const play = () => {
+        const media = getCurrentMedia();
         if (media) media.play();
         PlayerState.paused = false;
         updatePlayPauseIcons();
         saveState();
-      }
+      };
 
-      function pause() {
-        let media = getCurrentMedia();
+      const pause = () => {
+        const media = getCurrentMedia();
         if (media) media.pause();
         PlayerState.paused = true;
         updatePlayPauseIcons();
         saveState();
-      }
+      };
 
-      function togglePlay() {
-        PlayerState.paused ? play() : pause();
-      }
+      const togglePlay = () => PlayerState.paused ? play() : pause();
 
-      function seekTo(seconds) {
-        let media = getCurrentMedia();
+      const seekTo = (seconds) => {
+        const media = getCurrentMedia();
         if (media) media.currentTime = seconds;
         PlayerState.currentTime = seconds;
-      }
+      };
 
-      function seekBy(seconds) {
-        let media = getCurrentMedia();
+      // Seek con acumulación (para indicadores)
+      const seekByAccumulated = (direction) => {
+        const increment = 15;
+        if (direction === 'forward') {
+          PlayerState.seekAccumulator.forward += increment;
+          if (PlayerState.seekAccumulator.timeout) clearTimeout(PlayerState.seekAccumulator.timeout);
+          PlayerState.seekAccumulator.timeout = setTimeout(() => {
+            const total = PlayerState.seekAccumulator.forward;
+            if (total > 0) {
+              seekBy(total);
+              showSeekIndicator(total, 'forward');
+              PlayerState.seekAccumulator.forward = 0;
+            }
+          }, 300);
+        } else {
+          PlayerState.seekAccumulator.back += increment;
+          if (PlayerState.seekAccumulator.timeout) clearTimeout(PlayerState.seekAccumulator.timeout);
+          PlayerState.seekAccumulator.timeout = setTimeout(() => {
+            const total = PlayerState.seekAccumulator.back;
+            if (total > 0) {
+              seekBy(-total);
+              showSeekIndicator(total, 'back');
+              PlayerState.seekAccumulator.back = 0;
+            }
+          }, 300);
+        }
+      };
+
+      const seekBy = (seconds) => {
+        const media = getCurrentMedia();
         if (!media) return;
         let newTime = media.currentTime + seconds;
         if (newTime < 0) newTime = 0;
         if (newTime > PlayerState.duration) newTime = PlayerState.duration;
         seekTo(newTime);
-        // Mostrar indicador
-        const indicatorId = seconds > 0 ? 'seek-indicator-left' : 'seek-indicator-right';
-        const valSpan = seconds > 0 ? document.getElementById('seek-value') : document.getElementById('seek-value-right');
-        if (valSpan) valSpan.innerText = Math.abs(seconds) + 's';
-        const ind = document.getElementById(indicatorId);
+      };
+
+      const showSeekIndicator = (seconds, dir) => {
+        const id = dir === 'forward' ? 'seek-indicator-left' : 'seek-indicator-right';
+        const valSpan = dir === 'forward' ? document.getElementById('seek-value') : document.getElementById('seek-value-right');
+        if (valSpan) valSpan.innerText = seconds + 's';
+        const ind = document.getElementById(id);
         if (ind) {
           ind.classList.add('show');
           setTimeout(() => ind.classList.remove('show'), 800);
         }
-      }
+      };
 
-      function previous() {
+      const previous = () => {
         if (PlayerState.history.length > 1) {
           const prev = PlayerState.history[PlayerState.history.length - 2];
           loadEpisode(prev);
         } else {
           seekTo(0);
         }
-      }
+      };
 
-      function next() {
-        // Intentar usar playlist primero
+      const next = () => {
         if (PlayerState.playlist.length > 0) {
           const nextEp = PlayerState.playlist.shift();
           loadEpisode(nextEp);
         } else {
-          // Recomendado aleatorio (simulado)
           alert('No hay más episodios en la cola');
         }
-      }
+      };
 
-      function loadEpisode(ep, autoplay = true) {
+      const loadEpisode = (ep, autoplay = true) => {
         if (!ep) return;
-        // Guardar el actual en historial
         if (PlayerState.episode && PlayerState.episode.id !== ep.id) {
           PlayerState.history.push(PlayerState.episode);
         }
@@ -284,50 +306,41 @@
         PlayerState.duration = 0;
         PlayerState.subtitlesEnabled = false;
         PlayerState.lyricsLines = [];
+        PlayerState.activeLyricIndex = -1;
 
-        // Actualizar fuentes
         if (ep.mp3) audioElement.src = ep.mp3;
         if (ep.mp4) {
           videoElement.src = ep.mp4;
           fullscreenVideo.src = ep.mp4;
         }
 
-        // Cargar subtítulos/letra si existen
+        // Cargar subtítulos/letra (simulado)
         if (ep.subtitlesUrl) {
-          fetch(ep.subtitlesUrl)
-            .then(r => r.text())
-            .then(text => parseVTT(text))
-            .catch(() => console.warn('No se pudo cargar subtítulos'));
+          fetch(ep.subtitlesUrl).then(r => r.text()).then(parseVTT).catch(() => {});
         } else if (ep.gender === 'music') {
-          // Simular letra
           PlayerState.lyricsLines = [
             { start: 0, end: 5, text: 'Esta es la primera línea de la canción...' },
             { start: 5, end: 10, text: 'Esta es la segunda línea...' },
           ];
         } else if (ep.gender === 'podcast') {
-          // Simular transcripción
           PlayerState.lyricsLines = [
             { start: 0, end: 8, text: 'Bienvenidos al episodio de hoy...' },
-            { start: 8, end: 15, text: 'Hoy hablaremos sobre...' },
+            { start: 8, end: 15, text: 'Hoy hablaremos sobre inteligencia artificial...' },
           ];
         }
 
-        // Actualizar UI
         updateDynamicBackground(ep.cover);
         updateMediaSession(ep);
         if (autoplay) play();
         saveState();
-      }
+      };
 
-      function parseVTT(vttText) {
-        // Implementación básica
-        const lines = vttText.split('\n');
-        const cues = [];
-        // ... parseo simplificado
-        PlayerState.lyricsLines = cues;
-      }
+      const parseVTT = (text) => {
+        // Implementación básica (simulada)
+        PlayerState.lyricsLines = []; // ...
+      };
 
-      function updateMediaSession(ep) {
+      const updateMediaSession = (ep) => {
         if ('mediaSession' in navigator) {
           navigator.mediaSession.metadata = new MediaMetadata({
             title: ep.title,
@@ -342,21 +355,21 @@
           navigator.mediaSession.setActionHandler('seekbackward', (d) => seekBy(-(d.seekOffset || 15)));
           navigator.mediaSession.setActionHandler('seekforward', (d) => seekBy(d.seekOffset || 15));
         }
-      }
+      };
 
-      function updatePlayPauseIcons() {
+      const updatePlayPauseIcons = () => {
         const icon = PlayerState.paused ? 'play_arrow' : 'pause';
         document.querySelectorAll('.play-pause-icon').forEach(el => el.innerText = icon);
-      }
+      };
 
-      function updateDynamicBackground(coverUrl) {
+      const updateDynamicBackground = (coverUrl) => {
         const style = document.createElement('style');
-        style.innerHTML = `.dynamic-bg { background: ${getDynamicColor(coverUrl)}; }`;
+        style.innerHTML = `.dynamic-bg { background: linear-gradient(135deg, #0da6f2 0%, #101c22 80%); }`;
         document.head.appendChild(style);
-      }
+      };
 
-      // ---------- FAVORITOS Y LISTA GUARDADA ----------
-      function toggleFavorite() {
+      // Favoritos y lista guardada
+      const toggleFavorite = () => {
         if (!PlayerState.episode) return;
         const id = PlayerState.episode.id;
         const idx = PlayerState.favorites.indexOf(id);
@@ -364,9 +377,9 @@
         else PlayerState.favorites.splice(idx, 1);
         updateFavIcon();
         saveState();
-      }
+      };
 
-      function toggleSavedList() {
+      const toggleSavedList = () => {
         if (!PlayerState.episode) return;
         const ep = PlayerState.episode;
         const idx = PlayerState.savedList.findIndex(e => e.id === ep.id);
@@ -374,29 +387,28 @@
         else PlayerState.savedList.splice(idx, 1);
         updateSavedIcon();
         saveState();
-      }
+      };
 
-      function updateFavIcon() {
+      const updateFavIcon = () => {
         const isFav = PlayerState.favorites.includes(PlayerState.episode?.id);
         document.querySelectorAll('.fav-icon').forEach(icon => {
           icon.classList.toggle('text-red-500', isFav);
           icon.classList.toggle('fill-1', isFav);
         });
-      }
+      };
 
-      function updateSavedIcon() {
+      const updateSavedIcon = () => {
         const isSaved = PlayerState.savedList.some(e => e.id === PlayerState.episode?.id);
-        document.querySelectorAll('.saved-icon').forEach(icon => {
+        document.querySelectorAll('.saved-icon, .bookmark-icon').forEach(icon => {
           icon.classList.toggle('text-yellow-500', isSaved);
           icon.classList.toggle('fill-1', isSaved);
         });
-      }
+      };
 
-      // ---------- TEMPORIZADOR ----------
-      function startTimer(minutes, type = 'countdown') {
+      // Temporizador
+      const startTimer = (minutes, type = 'countdown') => {
         let endTime;
         if (type === 'end') {
-          // basado en el tiempo restante del episodio
           const remaining = (PlayerState.duration - PlayerState.currentTime) * 1000;
           endTime = Date.now() + remaining;
         } else {
@@ -404,72 +416,96 @@
         }
         PlayerState.timer = { endTime, type };
         saveState();
-        // Si el panel está abierto en timer, actualizar vista
         if (PlayerState.panelOpen && PlayerState.panelTab === 'timer') renderPanelContent('timer');
-      }
+      };
 
-      function cancelTimer() {
+      const cancelTimer = () => {
         PlayerState.timer = null;
         saveState();
         if (PlayerState.panelOpen && PlayerState.panelTab === 'timer') renderPanelContent('timer');
-      }
+      };
 
-      function addFiveMinutes() {
+      const addFiveMinutes = () => {
         if (PlayerState.timer && PlayerState.timer.type !== 'end') {
           PlayerState.timer.endTime += 5 * 60 * 1000;
           saveState();
           if (PlayerState.panelOpen && PlayerState.panelTab === 'timer') renderPanelContent('timer');
         }
-      }
+      };
 
-      // ---------- PANEL LATERAL ----------
-      function openPanel(tab) {
-        // Si el pop-out no está activo, primero abrir pop-out en modo adecuado
-        if (!PlayerState.mode.startsWith('popout')) {
-          // Determinar modo según disponibilidad de video
-          if (PlayerState.episode?.mp4 && PlayerState.episode?.mp3) {
-            setMode('popout-video'); // por defecto video si ambos existen
-          } else if (PlayerState.episode?.mp4) {
-            setMode('popout-video');
+      // Subtítulos / Letra
+      const toggleSubtitles = () => {
+        PlayerState.subtitlesEnabled = !PlayerState.subtitlesEnabled;
+        updateSubtitlesUI();
+      };
+
+      const updateSubtitlesUI = () => {
+        // En video: overlay
+        const overlay = document.getElementById('subtitles-overlay');
+        if (overlay) {
+          if (PlayerState.subtitlesEnabled && PlayerState.activeLyricIndex >= 0) {
+            overlay.textContent = PlayerState.lyricsLines[PlayerState.activeLyricIndex]?.text || '';
+            overlay.style.display = 'block';
           } else {
-            setMode('popout-audio');
+            overlay.style.display = 'none';
           }
         }
-        // Ahora abrimos panel
+        // En audio: área de letra
+        renderLyrics();
+      };
+
+      const renderLyrics = () => {
+        const lyricsArea = document.getElementById('audio-lyrics-area');
+        if (!lyricsArea) return;
+        if (PlayerState.mode === 'popout-audio' && PlayerState.subtitlesEnabled && PlayerState.lyricsLines.length > 0) {
+          let html = '<div class="lyrics-container px-4">';
+          PlayerState.lyricsLines.forEach((line, idx) => {
+            html += `<div class="lyrics-line text-2xl font-bold mb-6 ${idx === PlayerState.activeLyricIndex ? 'active' : 'text-white/30'}">${line.text}</div>`;
+          });
+          html += '</div>';
+          lyricsArea.innerHTML = html;
+          // Scroll automático
+          const active = document.querySelector('.lyrics-line.active');
+          if (active) active.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          lyricsArea.innerHTML = '';
+        }
+      };
+
+      // Panel lateral (escritorio)
+      const openPanel = (tab) => {
+        if (!PlayerState.mode.startsWith('popout')) {
+          setMode(PlayerState.episode?.mp4 ? 'popout-video' : 'popout-audio');
+        }
         PlayerState.panelOpen = true;
         PlayerState.panelTab = tab;
         applyPanelUI();
         renderPanelContent(tab);
-      }
+      };
 
-      function closePanel() {
+      const closePanel = () => {
         PlayerState.panelOpen = false;
         document.getElementById('side-panel')?.style.setProperty('width', '0');
         document.getElementById('media-content')?.classList.remove('w-3/5');
-      }
+      };
 
-      function togglePanel(tab) {
-        if (PlayerState.panelOpen && PlayerState.panelTab === tab) {
-          closePanel();
-        } else {
-          openPanel(tab);
-        }
-      }
+      const togglePanel = (tab) => {
+        if (PlayerState.panelOpen && PlayerState.panelTab === tab) closePanel();
+        else openPanel(tab);
+      };
 
-      function applyPanelUI() {
+      const applyPanelUI = () => {
         const panel = document.getElementById('side-panel');
         const media = document.getElementById('media-content');
         if (panel && media) {
           panel.style.width = '40%';
           media.classList.add('w-3/5');
         }
-      }
+      };
 
-      function renderPanelContent(tab) {
+      const renderPanelContent = (tab) => {
         const contentDiv = document.getElementById('panel-content');
         if (!contentDiv) return;
-
-        // Actualizar pestañas activas
         document.querySelectorAll('.tab-btn').forEach(btn => {
           const t = btn.dataset.panelTab;
           btn.classList.toggle('text-primary', t === tab);
@@ -479,27 +515,20 @@
         if (tab === 'queue') {
           contentDiv.innerHTML = `<div class="text-slate-400">Aquí se mostrarán los episodios siguientes (simulado)</div>`;
         } else if (tab === 'saved') {
-          contentDiv.innerHTML = `
-            <div class="text-sm font-medium mb-2">Favoritos (${PlayerState.favorites.length})</div>
-            <div class="text-slate-400">Lista de episodios guardados (simulado)</div>
-          `;
+          contentDiv.innerHTML = `<div class="text-sm font-medium mb-2">Favoritos (${PlayerState.favorites.length})</div><div class="text-slate-400">Lista de episodios guardados (simulado)</div>`;
         } else if (tab === 'info') {
           const ep = PlayerState.episode;
-          if (ep.gender === 'music') {
-            // Mostrar letra
+          if (ep.gender === 'music' || ep.gender === 'podcast') {
             let html = '<div class="lyrics-container">';
             PlayerState.lyricsLines.forEach((line, idx) => {
               html += `<div class="lyrics-line ${idx === PlayerState.activeLyricIndex ? 'active' : ''}">${line.text}</div>`;
             });
             html += '</div>';
             contentDiv.innerHTML = html;
-          } else if (ep.gender === 'podcast') {
-            contentDiv.innerHTML = `<div class="lyrics-container">${PlayerState.lyricsLines.map(l => l.text).join('<br>')}</div>`;
           } else {
             contentDiv.innerHTML = `<div>${ep.description || 'Sin descripción'}</div>`;
           }
         } else if (tab === 'speed') {
-          // Renderizar carrusel de velocidad
           contentDiv.innerHTML = `
             <div class="p-2">
               <h4 class="font-medium mb-4 text-center">Velocidad</h4>
@@ -508,10 +537,11 @@
                 <div class="speed-carousel"></div>
               </div>
               <div class="flex justify-center gap-2 mt-6">
+                <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="0.5">0.5</button>
+                <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="0.75">0.75</button>
                 <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="1.0">1</button>
-                <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="1.2">1.2</button>
+                <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="1.25">1.25</button>
                 <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="1.5">1.5</button>
-                <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="1.8">1.8</button>
                 <button class="speed-preset w-10 h-10 rounded-full bg-slate-700 hover:bg-slate-600 text-sm" data-speed="2.0">2</button>
               </div>
             </div>
@@ -520,11 +550,10 @@
         } else if (tab === 'timer') {
           renderTimerPanel(contentDiv);
         }
-      }
+      };
 
-      function renderTimerPanel(container) {
+      const renderTimerPanel = (container) => {
         if (PlayerState.timer) {
-          // Mostrar contador regresivo
           const remaining = Math.max(0, (PlayerState.timer.endTime - Date.now()) / 1000);
           container.innerHTML = `
             <div class="text-center py-8">
@@ -553,9 +582,9 @@
             });
           });
         }
-      }
+      };
 
-      function initSpeedCarousel() {
+      const initSpeedCarousel = () => {
         const container = document.querySelector('.speed-carousel');
         if (!container) return;
         const minSpeed = 0.5;
@@ -563,9 +592,10 @@
         const step = 0.05;
         const numTicks = Math.round((maxSpeed - minSpeed) / step) + 1;
         const tickWidth = 20;
-        let currentIndex = Math.round((PlayerState.speed - minSpeed) / step);
+        const initialSpeed = PlayerState.speed;
+        let currentIndex = Math.round((initialSpeed - minSpeed) / step);
 
-        // Generar ticks
+        container.innerHTML = '';
         for (let i = 0; i < numTicks; i++) {
           const speed = minSpeed + i * step;
           const tick = document.createElement('div');
@@ -574,7 +604,6 @@
           const line = document.createElement('div');
           line.className = 'line';
           tick.appendChild(line);
-          // Determinar si es major (cada 0.5)
           if (Math.abs(speed * 2 - Math.round(speed * 2)) < 0.01) {
             tick.classList.add('major');
             const span = document.createElement('span');
@@ -586,13 +615,13 @@
           container.appendChild(tick);
         }
 
-        const sliderContainer = document.querySelector('.relative');
+        const sliderContainer = container.parentElement;
         const halfOffset = sliderContainer.clientWidth / 2 - tickWidth / 2;
         container.style.paddingLeft = halfOffset + 'px';
         container.style.paddingRight = halfOffset + 'px';
         container.scrollLeft = currentIndex * tickWidth;
 
-        function updateSpeedFromScroll() {
+        const updateSpeedFromScroll = () => {
           const idx = Math.round(container.scrollLeft / tickWidth);
           if (idx >= 0 && idx < numTicks) {
             currentIndex = idx;
@@ -601,18 +630,14 @@
             audioElement.playbackRate = speed;
             videoElement.playbackRate = speed;
             fullscreenVideo.playbackRate = speed;
-            document.querySelectorAll('#speed-btn').forEach(el => el.innerText = speed.toFixed(2) + 'x');
-            // Colorear tick activo
+            document.querySelectorAll('#speed-btn, #fs-speed .text-sm').forEach(el => el.innerText = speed.toFixed(2) + 'x');
             document.querySelectorAll('.speed-tick .line').forEach((line, i) => {
               line.style.background = i === idx ? '#0da6f2' : '#b3b3b3';
             });
           }
-        }
+        };
 
-        container.addEventListener('scroll', () => {
-          requestAnimationFrame(updateSpeedFromScroll);
-        });
-
+        container.addEventListener('scroll', () => requestAnimationFrame(updateSpeedFromScroll));
         container.addEventListener('click', (e) => {
           const tick = e.target.closest('.speed-tick');
           if (tick) {
@@ -621,7 +646,6 @@
           }
         });
 
-        // Botones rápidos
         document.querySelectorAll('.speed-preset').forEach(btn => {
           btn.addEventListener('click', () => {
             const sp = parseFloat(btn.dataset.speed);
@@ -629,79 +653,33 @@
             container.scrollTo({ left: idx * tickWidth, behavior: 'smooth' });
           });
         });
-
-        // Inicializar color
         updateSpeedFromScroll();
-      }
+      };
 
-      // ---------- SUBTÍTULOS / LETRA ----------
-      function toggleSubtitles() {
-        PlayerState.subtitlesEnabled = !PlayerState.subtitlesEnabled;
-        updateSubtitlesUI();
-      }
-
-      function updateSubtitlesUI() {
-        // En video, mostrar overlay
-        const overlay = document.getElementById('subtitles-overlay');
-        if (overlay) {
-          if (PlayerState.subtitlesEnabled && PlayerState.activeLyricIndex >= 0) {
-            overlay.textContent = PlayerState.lyricsLines[PlayerState.activeLyricIndex]?.text || '';
-            overlay.style.display = 'block';
-          } else {
-            overlay.style.display = 'none';
-          }
-        }
-        // En audio, se renderiza en panel o en área derecha (ya lo hace renderLyrics)
-        renderLyrics();
-      }
-
-      function renderLyrics() {
-        // Si estamos en popout-audio y subtítulos activados, mostrar en el área de letra
-        const lyricsArea = document.getElementById('audio-lyrics-area');
-        if (lyricsArea && PlayerState.mode === 'popout-audio' && PlayerState.subtitlesEnabled) {
-          let html = '<div class="lyrics-container">';
-          PlayerState.lyricsLines.forEach((line, idx) => {
-            html += `<div class="lyrics-line ${idx === PlayerState.activeLyricIndex ? 'active' : ''}">${line.text}</div>`;
-          });
-          html += '</div>';
-          lyricsArea.innerHTML = html;
-        } else if (lyricsArea) {
-          lyricsArea.innerHTML = ''; // limpiar
-        }
-      }
-
-      // ---------- CAMBIO DE VISTAS ----------
-      function setMode(newMode) {
-        const oldMode = PlayerState.mode;
+      // Cambio de vistas (escritorio)
+      const setMode = (newMode) => {
         PlayerState.mode = newMode;
-
-        // Ocultar todas las vistas
         document.getElementById('view-minimized')?.classList.add('hidden');
         document.getElementById('view-popout')?.classList.add('hidden');
         document.getElementById('view-fullscreen')?.classList.add('hidden');
-
         if (newMode === 'minimized') {
           document.getElementById('view-minimized')?.classList.remove('hidden');
           renderBottomBar('bottom-bar');
         } else if (newMode.startsWith('popout')) {
           document.getElementById('view-popout')?.classList.remove('hidden');
           renderBottomBar('popout-bottom-bar');
-          // Actualizar toggle video/audio
           const videoBtn = document.getElementById('mode-video');
           const audioBtn = document.getElementById('mode-audio');
           const hasVideo = !!PlayerState.episode?.mp4;
           const hasAudio = !!PlayerState.episode?.mp3;
-
           videoBtn.disabled = !hasVideo;
           audioBtn.disabled = !hasAudio;
-
           if (newMode === 'popout-video') {
             videoBtn.classList.add('bg-primary', 'text-white');
             audioBtn.classList.remove('bg-primary', 'text-white');
             videoElement.classList.remove('hidden');
             document.getElementById('popout-cover')?.classList.add('hidden');
             document.getElementById('fullscreen-btn')?.classList.remove('hidden');
-            // Ajustar layout: video ocupa todo el espacio disponible
             document.getElementById('media-content').classList.remove('flex-col', 'items-start', 'justify-end');
           } else {
             audioBtn.classList.add('bg-primary', 'text-white');
@@ -709,41 +687,34 @@
             videoElement.classList.add('hidden');
             document.getElementById('popout-cover')?.classList.remove('hidden');
             document.getElementById('fullscreen-btn')?.classList.add('hidden');
-            // En audio, cover a la izquierda inferior
             document.getElementById('media-content').classList.add('flex-col', 'items-start', 'justify-end');
           }
-          // Sincronizar fuente de video
           if (PlayerState.episode?.mp4) videoElement.src = PlayerState.episode.mp4;
           if (PlayerState.episode?.mp3) audioElement.src = PlayerState.episode.mp3;
         } else if (newMode === 'fullscreen') {
           document.getElementById('view-fullscreen')?.classList.remove('hidden');
-          // Sincronizar con el estado actual
           if (PlayerState.episode?.mp4) {
             fullscreenVideo.src = PlayerState.episode.mp4;
             fullscreenVideo.currentTime = PlayerState.currentTime;
             fullscreenVideo.classList.remove('hidden');
-            document.getElementById('fullscreen-cover')?.classList.add('hidden');
+            document.getElementById('fullscreen-cover').classList.add('hidden');
           } else {
             fullscreenVideo.classList.add('hidden');
             document.getElementById('fullscreen-cover').src = PlayerState.episode?.cover;
             document.getElementById('fullscreen-cover').classList.remove('hidden');
           }
           if (!PlayerState.paused) fullscreenVideo.play();
-          // Actualizar título
           document.getElementById('fullscreen-title').innerText = PlayerState.episode?.title || '';
         }
-
-        // Si el panel estaba abierto, re-aplicar
         if (PlayerState.panelOpen) {
           applyPanelUI();
           renderPanelContent(PlayerState.panelTab);
         }
-
         saveState();
-      }
+      };
 
-      // ---------- RENDERIZADO DE LA BARRA INFERIOR (reutilizable) ----------
-      function renderBottomBar(containerId) {
+      // Renderizado de la barra inferior (escritorio)
+      const renderBottomBar = (containerId) => {
         const container = document.getElementById(containerId);
         if (!container) return;
         const ep = PlayerState.episode || defaultEpisode;
@@ -756,7 +727,6 @@
                 <div class="progress-thumb absolute right-0 top-1/2 -translate-y-1/2 w-3 h-3 bg-primary rounded-full shadow-lg opacity-0"></div>
               </div>
             </div>
-            <!-- Bloque izquierdo -->
             <div class="flex items-center gap-4 min-w-0">
               <div class="relative group cursor-pointer" id="cover-popout-trigger">
                 <img src="${ep.cover}" class="size-14 rounded-lg object-cover border border-white/10 episode-cover">
@@ -787,7 +757,6 @@
                 </div>
               </div>
             </div>
-            <!-- Bloque central: controles -->
             <div class="flex flex-col items-center">
               <div class="flex items-center gap-4">
                 <button class="text-xs border border-slate-600 rounded px-1 py-0.5 hover:border-slate-400" id="speed-btn">${PlayerState.speed.toFixed(2)}x</button>
@@ -799,7 +768,6 @@
                 <button id="repeat-btn"><span class="material-symbols-outlined">${PlayerState.repeat === 'one' ? 'repeat_one' : PlayerState.repeat === 'all' ? 'repeat' : 'repeat'}</span></button>
               </div>
             </div>
-            <!-- Bloque derecho: acciones -->
             <div class="flex items-center justify-end gap-1">
               <button class="p-2 hover:bg-slate-800 rounded-full" id="fav-btn">
                 <span class="material-symbols-outlined fav-icon ${isFav ? 'text-red-500 fill-1' : ''}">favorite</span>
@@ -822,28 +790,24 @@
           </div>
         `;
         attachBottomBarEvents(containerId);
-      }
+      };
 
-      function attachBottomBarEvents(containerId) {
+      const attachBottomBarEvents = (containerId) => {
         const container = document.getElementById(containerId);
         if (!container) return;
-
         container.querySelector('#playpause-btn')?.addEventListener('click', togglePlay);
         container.querySelector('#prev-btn')?.addEventListener('click', previous);
         container.querySelector('#next-btn')?.addEventListener('click', next);
-        container.querySelector('#back15')?.addEventListener('click', () => seekBy(-15));
-        container.querySelector('#forward15')?.addEventListener('click', () => seekBy(15));
+        container.querySelector('#back15')?.addEventListener('click', () => seekByAccumulated('back'));
+        container.querySelector('#forward15')?.addEventListener('click', () => seekByAccumulated('forward'));
         container.querySelector('#repeat-btn')?.addEventListener('click', cycleRepeat);
         container.querySelector('#speed-btn')?.addEventListener('click', () => togglePanel('speed'));
         container.querySelector('#timer-btn')?.addEventListener('click', () => togglePanel('timer'));
         container.querySelector('#queue-btn')?.addEventListener('click', () => togglePanel('queue'));
         container.querySelector('#saved-btn')?.addEventListener('click', () => togglePanel('saved'));
         container.querySelector('#cc-btn')?.addEventListener('click', () => {
-          if (PlayerState.episode?.gender === 'false') {
-            togglePanel('info');
-          } else {
-            toggleSubtitles();
-          }
+          if (PlayerState.episode?.gender === 'false') togglePanel('info');
+          else toggleSubtitles();
         });
         container.querySelector('#fav-btn')?.addEventListener('click', toggleFavorite);
         container.querySelector('#add-to-list-btn')?.addEventListener('click', toggleSavedList);
@@ -855,8 +819,6 @@
           if (PlayerState.mode.startsWith('popout')) setMode('minimized');
           else setMode(PlayerState.episode?.mp4 ? 'popout-video' : 'popout-audio');
         });
-
-        // Botones del menú de tres puntos
         container.querySelector('#speed-btn-panel')?.addEventListener('click', () => togglePanel('speed'));
         container.querySelector('#timer-btn-panel')?.addEventListener('click', () => togglePanel('timer'));
         container.querySelector('#download-btn')?.addEventListener('click', () => {
@@ -866,15 +828,11 @@
           if (PlayerState.episode?.detailsUrl) navigator.clipboard?.writeText(PlayerState.episode.detailsUrl);
         });
         container.querySelector('#info-btn')?.addEventListener('click', () => togglePanel('info'));
-
-        // Barra de progreso
         container.querySelector('#progress-container')?.addEventListener('click', (e) => {
           const rect = e.currentTarget.getBoundingClientRect();
           const percent = (e.clientX - rect.left) / rect.width;
           seekTo(percent * PlayerState.duration);
         });
-
-        // Volumen
         const volRange = container.querySelector('#volume-range');
         if (volRange) {
           volRange.addEventListener('input', (e) => {
@@ -886,9 +844,9 @@
             container.querySelector('#volume-fill').style.width = (val * 100) + '%';
           });
         }
-      }
+      };
 
-      function cycleRepeat() {
+      const cycleRepeat = () => {
         const states = ['off', 'one', 'all'];
         const idx = states.indexOf(PlayerState.repeat);
         PlayerState.repeat = states[(idx + 1) % states.length];
@@ -896,13 +854,13 @@
           icon.innerText = PlayerState.repeat === 'one' ? 'repeat_one' : 'repeat';
         });
         saveState();
-      }
+      };
 
-      // ---------- CONSTRUCCIÓN DE LAS VISTAS ----------
-      function buildPlayerHTML() {
+      // Construcción del HTML (escritorio + móvil)
+      const buildPlayerHTML = () => {
         return `
-          <!-- Vista minimizada -->
-          <div id="view-minimized" class="flex-1 flex flex-col relative">
+          <!-- Vista minimizada (escritorio) -->
+          <div id="view-minimized" class="desktop-only flex-1 flex flex-col relative">
             <div class="flex-1 p-8 overflow-auto opacity-30 pointer-events-none">
               <h1 class="text-4xl font-bold mb-6">Explora nuevos episodios</h1>
               <div class="grid grid-cols-3 gap-4">
@@ -912,8 +870,8 @@
             <div id="bottom-bar" class="glass-dark border-t border-white/10 absolute bottom-0 left-0 right-0 z-50"></div>
           </div>
 
-          <!-- Vista pop-out -->
-          <div id="view-popout" class="hidden flex-1 flex flex-col absolute inset-0 z-40">
+          <!-- Vista pop-out (escritorio) -->
+          <div id="view-popout" class="desktop-only hidden flex-1 flex-col absolute inset-0 z-40">
             <header class="flex items-center justify-between px-6 h-14 glass border-b border-white/10">
               <button id="close-popout" class="p-2 hover:bg-white/10 rounded-lg"><span class="material-symbols-outlined">expand_more</span></button>
               <div class="flex bg-black/40 p-1 rounded-full">
@@ -928,6 +886,8 @@
                 <img id="popout-cover" class="max-w-full max-h-full object-contain rounded-2xl shadow-2xl hidden" alt="cover">
                 <div id="subtitles-overlay" class="subtitles-overlay hidden"></div>
                 <button id="fullscreen-btn" class="absolute bottom-4 right-4 p-3 bg-black/40 hover:bg-black/60 rounded-lg border border-white/20 z-10 hidden"><span class="material-symbols-outlined">fullscreen</span></button>
+                <!-- Área de letra para audio (se inyecta aquí) -->
+                <div id="audio-lyrics-area" class="absolute inset-0 flex items-center justify-end pointer-events-none"></div>
               </div>
               <div id="side-panel" class="side-panel w-0 bg-black/60 backdrop-blur-xl border-l border-white/10 overflow-hidden transition-all duration-300">
                 <div class="h-full flex flex-col p-4">
@@ -954,8 +914,8 @@
             <div id="popout-bottom-bar" class="glass-dark border-t border-white/10"></div>
           </div>
 
-          <!-- Vista fullscreen -->
-          <div id="view-fullscreen" class="hidden fixed inset-0 z-[100] bg-black flex flex-col">
+          <!-- Vista fullscreen (escritorio) -->
+          <div id="view-fullscreen" class="desktop-only hidden fixed inset-0 z-[100] bg-black flex flex-col">
             <div class="absolute inset-0 flex items-center justify-center">
               <video id="fullscreen-video" class="w-full h-full object-contain" playsinline></video>
               <img id="fullscreen-cover" class="w-full h-full object-contain hidden" alt="">
@@ -997,29 +957,130 @@
             </div>
           </div>
 
-          <!-- Indicadores de avance/retroceso -->
+          <!-- ========== VISTA MÓVIL ========== -->
+          <div class="mobile-only flex-1 flex flex-col relative">
+            <!-- Barra inferior fija (minimizada) -->
+            <div id="mobile-bottom-bar" class="glass-dark border-t border-white/10 absolute bottom-0 left-0 right-0 z-50 h-16 flex items-center px-4">
+              <div class="absolute top-0 left-0 right-0 h-0.5 bg-slate-800"><div class="h-full bg-primary progress-fill-mobile" style="width: 0%"></div></div>
+              <div class="flex items-center justify-between w-full">
+                <div class="flex items-center gap-3 min-w-0 flex-1">
+                  <img id="mobile-cover" class="size-11 rounded-md object-cover border border-white/10" src="${PlayerState.episode?.cover || ''}" alt="">
+                  <div class="flex flex-col min-w-0">
+                    <h3 class="text-sm font-semibold truncate" id="mobile-title">${PlayerState.episode?.title || ''}</h3>
+                    <p class="text-[11px] text-slate-400 truncate" id="mobile-author">${PlayerState.episode?.author || ''}</p>
+                  </div>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button id="mobile-playpause" class="p-2"><span class="material-symbols-outlined text-3xl play-pause-icon">${PlayerState.paused ? 'play_arrow' : 'pause'}</span></button>
+                  <button id="mobile-popout" class="p-2"><span class="material-symbols-outlined text-3xl">expand_less</span></button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Pop-out móvil (ocupa toda la pantalla, se muestra al hacer clic en expand_less) -->
+            <div id="mobile-popout" class="hidden fixed inset-0 z-[100] flex flex-col dynamic-bg" style="background: #101c22;">
+              <header class="flex items-center justify-between px-4 h-14 glass border-b border-white/10">
+                <button id="mobile-close-popout" class="p-2"><span class="material-symbols-outlined text-3xl">expand_more</span></button>
+                <div class="flex bg-black/40 p-1 rounded-full">
+                  <button id="mobile-mode-video" class="px-4 py-1 rounded-full text-xs font-bold">Video</button>
+                  <button id="mobile-mode-audio" class="px-4 py-1 rounded-full text-xs font-bold bg-primary text-white">Audio</button>
+                </div>
+                <button id="mobile-more-menu" class="p-2"><span class="material-symbols-outlined">more_horiz</span></button>
+              </header>
+              <!-- Contenedor media (cuadrado) -->
+              <div class="flex-1 flex flex-col items-center justify-center px-4 py-6">
+                <div class="w-full max-w-[400px] aspect-square rounded-2xl overflow-hidden shadow-2xl border border-white/5 relative" id="mobile-media-container">
+                  <video id="mobile-video" class="w-full h-full object-cover hidden" playsinline></video>
+                  <img id="mobile-cover-big" class="w-full h-full object-cover" src="${PlayerState.episode?.cover || ''}" alt="">
+                  <div id="mobile-subtitles-overlay" class="absolute bottom-4 left-0 right-0 text-center text-white text-shadow hidden"></div>
+                  <button id="mobile-fullscreen" class="absolute bottom-2 right-2 p-2 bg-black/40 rounded-lg hidden"><span class="material-symbols-outlined">fullscreen</span></button>
+                </div>
+                <!-- Área de letra para audio (cuando está activa, reemplaza el cover) -->
+                <div id="mobile-lyrics-area" class="w-full max-w-[400px] mt-4 hidden"></div>
+              </div>
+              <!-- Metadatos y controles -->
+              <div class="px-4 pb-8">
+                <div class="flex items-center justify-between mb-2">
+                  <div class="min-w-0">
+                    <h2 class="text-xl font-bold truncate" id="mobile-big-title">${PlayerState.episode?.title || ''}</h2>
+                    <p class="text-base text-slate-400 truncate" id="mobile-big-author">${PlayerState.episode?.author || ''}</p>
+                  </div>
+                  <button id="mobile-fav" class="p-2"><span class="material-symbols-outlined fav-icon ${PlayerState.favorites.includes(PlayerState.episode?.id) ? 'text-red-500 fill-1' : ''}">favorite</span></button>
+                </div>
+                <div class="mb-4">
+                  <div class="relative h-1.5 w-full bg-slate-700/50 rounded-full mb-1">
+                    <div class="absolute top-0 left-0 h-full bg-primary rounded-full progress-fill-mobile" style="width: ${(PlayerState.currentTime/PlayerState.duration*100)||0}%"></div>
+                  </div>
+                  <div class="flex justify-between text-xs text-slate-500">
+                    <span class="progress-time-current">${formatTime(PlayerState.currentTime)}</span>
+                    <span class="progress-time-total">${formatTime(PlayerState.duration)}</span>
+                  </div>
+                </div>
+                <div class="flex items-center justify-between mb-6">
+                  <button id="mobile-speed" class="text-xs border border-slate-600 rounded px-2 py-1">${PlayerState.speed.toFixed(2)}x</button>
+                  <div class="flex items-center gap-4">
+                    <button id="mobile-back15"><span class="material-symbols-outlined text-3xl">replay_10</span></button>
+                    <button id="mobile-prev"><span class="material-symbols-outlined text-3xl">skip_previous</span></button>
+                    <button id="mobile-playpause-big" class="size-14 rounded-full bg-white text-black flex items-center justify-center"><span class="material-symbols-outlined text-4xl play-pause-icon">${PlayerState.paused ? 'play_arrow' : 'pause'}</span></button>
+                    <button id="mobile-next"><span class="material-symbols-outlined text-3xl">skip_next</span></button>
+                    <button id="mobile-forward15"><span class="material-symbols-outlined text-3xl">forward_10</span></button>
+                  </div>
+                  <button id="mobile-repeat"><span class="material-symbols-outlined">${PlayerState.repeat === 'one' ? 'repeat_one' : 'repeat'}</span></button>
+                </div>
+                <div class="flex justify-around">
+                  <button id="mobile-timer" class="flex flex-col items-center text-slate-400"><span class="material-symbols-outlined">timer</span></button>
+                  <button id="mobile-cc" class="flex flex-col items-center text-slate-400"><span class="material-symbols-outlined">${PlayerState.episode?.gender === 'music' ? 'mic' : PlayerState.episode?.gender === 'podcast' ? 'closed_caption' : 'info'}</span></button>
+                  <button id="mobile-queue" class="flex flex-col items-center text-slate-400"><span class="material-symbols-outlined">queue_music</span></button>
+                  <button id="mobile-share" class="flex flex-col items-center text-slate-400"><span class="material-symbols-outlined">share</span></button>
+                  <button id="mobile-saved" class="flex flex-col items-center text-slate-400"><span class="material-symbols-outlined bookmark-icon ${PlayerState.savedList.some(e => e.id === PlayerState.episode?.id) ? 'text-yellow-500 fill-1' : ''}">bookmark</span></button>
+                </div>
+              </div>
+              <!-- Indicador de arrastre -->
+              <div class="flex justify-center pb-2"><div class="w-12 h-1 bg-white/20 rounded-full"></div></div>
+            </div>
+
+            <!-- Panel móvil (para tres puntos, velocidad, temporizador, etc.) -->
+            <div id="mobile-panel" class="hidden fixed inset-0 z-[110] bg-black/90 backdrop-blur-xl flex flex-col">
+              <div class="flex items-center justify-between p-4 border-b border-white/10">
+                <div class="flex items-center gap-3">
+                  <img id="panel-mobile-cover" class="w-10 h-10 rounded-lg object-cover" src="${PlayerState.episode?.cover || ''}" alt="">
+                  <div>
+                    <div class="font-medium text-sm">${PlayerState.episode?.title || ''}</div>
+                    <div class="text-xs text-slate-400">${PlayerState.episode?.author || ''}</div>
+                  </div>
+                </div>
+                <button id="mobile-panel-playpause" class="p-2"><span class="material-symbols-outlined text-3xl play-pause-icon">${PlayerState.paused ? 'play_arrow' : 'pause'}</span></button>
+              </div>
+              <div class="flex-1 overflow-y-auto p-4" id="mobile-panel-content">
+                <!-- Aquí se inyecta el contenido según la opción elegida -->
+              </div>
+              <div class="p-4 border-t border-white/10 flex justify-end">
+                <button id="mobile-panel-close" class="px-4 py-2 bg-slate-800 rounded-lg">Cerrar</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Indicadores de avance/retroceso (compartidos) -->
           <div id="seek-indicator-left" class="seek-indicator left-10"><span class="material-symbols-outlined">forward_10</span> <span id="seek-value">0s</span></div>
           <div id="seek-indicator-right" class="seek-indicator right-10"><span class="material-symbols-outlined">replay_10</span> <span id="seek-value-right">0s</span></div>
         `;
-      }
+      };
 
-      // ---------- INICIALIZACIÓN ----------
-      function init() {
+      // Inicialización
+      const init = () => {
         loadState();
         document.getElementById('player-root').innerHTML = buildPlayerHTML();
         initMedia();
         setMode('minimized');
         loadEpisode(PlayerState.episode, !PlayerState.paused);
 
-        // Eventos globales de las vistas
+        // Eventos globales (escritorio)
         document.getElementById('close-popout')?.addEventListener('click', () => setMode('minimized'));
         document.getElementById('mode-video')?.addEventListener('click', () => setMode('popout-video'));
         document.getElementById('mode-audio')?.addEventListener('click', () => setMode('popout-audio'));
         document.getElementById('fullscreen-btn')?.addEventListener('click', () => setMode('fullscreen'));
         document.getElementById('fs-exit')?.addEventListener('click', () => setMode('popout-video'));
         document.getElementById('close-panel')?.addEventListener('click', closePanel);
-
-        // Pestañas del panel
         document.querySelectorAll('.tab-btn').forEach(btn => {
           btn.addEventListener('click', (e) => {
             const tab = e.target.dataset.panelTab;
@@ -1027,23 +1088,15 @@
             renderPanelContent(tab);
           });
         });
-
-        // Panel play/pause
         document.getElementById('panel-playpause')?.addEventListener('click', togglePlay);
-
-        // Controles fullscreen
         document.getElementById('fs-playpause')?.addEventListener('click', togglePlay);
         document.getElementById('fs-prev')?.addEventListener('click', previous);
         document.getElementById('fs-next')?.addEventListener('click', next);
-        document.getElementById('fs-back')?.addEventListener('click', () => seekBy(-15));
-        document.getElementById('fs-forward')?.addEventListener('click', () => seekBy(15));
+        document.getElementById('fs-back')?.addEventListener('click', () => seekByAccumulated('back'));
+        document.getElementById('fs-forward')?.addEventListener('click', () => seekByAccumulated('forward'));
         document.getElementById('fs-repeat')?.addEventListener('click', cycleRepeat);
-        document.getElementById('fs-shuffle')?.addEventListener('click', () => {
-          PlayerState.shuffle = !PlayerState.shuffle;
-          // Aquí se podría actualizar la cola
-        });
+        document.getElementById('fs-shuffle')?.addEventListener('click', () => PlayerState.shuffle = !PlayerState.shuffle);
         document.getElementById('fs-speed')?.addEventListener('click', () => togglePanel('speed'));
-
         const fsProgress = document.getElementById('fs-progress-container');
         if (fsProgress) {
           fsProgress.addEventListener('click', (e) => {
@@ -1052,7 +1105,6 @@
             seekTo(percent * PlayerState.duration);
           });
         }
-
         const fsVolume = document.getElementById('fs-volume-range');
         if (fsVolume) {
           fsVolume.addEventListener('input', (e) => {
@@ -1065,7 +1117,41 @@
           });
         }
 
-        // Actualización periódica del temporizador
+        // Eventos móvil
+        const mobilePopout = document.getElementById('mobile-popout');
+        const mobilePanel = document.getElementById('mobile-panel');
+        document.getElementById('mobile-popout')?.addEventListener('click', () => {
+          mobilePopout.classList.remove('hidden');
+        });
+        document.getElementById('mobile-close-popout')?.addEventListener('click', () => {
+          mobilePopout.classList.add('hidden');
+        });
+        document.getElementById('mobile-more-menu')?.addEventListener('click', () => {
+          // Mostrar panel con opciones (velocidad, temporizador, etc.)
+          mobilePanel.classList.remove('hidden');
+          renderMobilePanelContent('main');
+        });
+        document.getElementById('mobile-panel-close')?.addEventListener('click', () => {
+          mobilePanel.classList.add('hidden');
+        });
+
+        // Sincronizar estados con la vista móvil
+        setInterval(() => {
+          if (window.innerWidth <= 768) {
+            // Actualizar barras de progreso móvil
+            const percent = (PlayerState.currentTime / PlayerState.duration * 100) || 0;
+            document.querySelectorAll('.progress-fill-mobile').forEach(el => el.style.width = percent + '%');
+            document.querySelectorAll('#mobile-title, #mobile-big-title').forEach(el => el.innerText = PlayerState.episode?.title || '');
+            document.querySelectorAll('#mobile-author, #mobile-big-author').forEach(el => el.innerText = PlayerState.episode?.author || '');
+            document.getElementById('mobile-cover')?.setAttribute('src', PlayerState.episode?.cover || '');
+            document.getElementById('mobile-cover-big')?.setAttribute('src', PlayerState.episode?.cover || '');
+            document.getElementById('panel-mobile-cover')?.setAttribute('src', PlayerState.episode?.cover || '');
+            updateFavIcon();
+            updateSavedIcon();
+          }
+        }, 100);
+
+        // Temporizador global
         setInterval(() => {
           if (PlayerState.timer) {
             const now = Date.now();
@@ -1074,28 +1160,71 @@
               PlayerState.timer = null;
               saveState();
               if (PlayerState.panelOpen && PlayerState.panelTab === 'timer') renderPanelContent('timer');
+              if (mobilePanel && !mobilePanel.classList.contains('hidden')) renderMobilePanelContent('timer');
             } else {
               if (PlayerState.panelOpen && PlayerState.panelTab === 'timer') renderPanelContent('timer');
+              if (mobilePanel && !mobilePanel.classList.contains('hidden')) renderMobilePanelContent('timer');
             }
           }
         }, 500);
-      }
+      };
 
-      // Exponer API global
-      window.PlayerAPI = {
-        loadEpisode: (ep) => loadEpisode(ep, true),
-        addToFavorites: (epId) => { if (!PlayerState.favorites.includes(epId)) PlayerState.favorites.push(epId); saveState(); updateFavIcon(); },
-        removeFromFavorites: (epId) => { PlayerState.favorites = PlayerState.favorites.filter(id => id !== epId); saveState(); updateFavIcon(); },
-        addToSavedList: (ep) => { if (!PlayerState.savedList.some(e => e.id === ep.id)) PlayerState.savedList.push(ep); saveState(); updateSavedIcon(); },
-        removeFromSavedList: (epId) => { PlayerState.savedList = PlayerState.savedList.filter(e => e.id !== epId); saveState(); updateSavedIcon(); },
-        getFavorites: () => PlayerState.favorites,
-        getSavedList: () => PlayerState.savedList,
-        getHistory: () => PlayerState.history,
-        play,
-        pause,
-        togglePlay,
-        next,
-        previous,
+      // Renderizar contenido del panel móvil (simplificado)
+      const renderMobilePanelContent = (section) => {
+        const content = document.getElementById('mobile-panel-content');
+        if (!content) return;
+        if (section === 'main') {
+          content.innerHTML = `
+            <div class="space-y-2">
+              <button class="w-full text-left p-3 bg-slate-800 rounded-lg" id="mobile-panel-speed">Velocidad</button>
+              <button class="w-full text-left p-3 bg-slate-800 rounded-lg" id="mobile-panel-timer">Temporizador</button>
+              <button class="w-full text-left p-3 bg-slate-800 rounded-lg" id="mobile-panel-download">Descargar</button>
+              <button class="w-full text-left p-3 bg-slate-800 rounded-lg" id="mobile-panel-share">Compartir</button>
+              <button class="w-full text-left p-3 bg-slate-800 rounded-lg" id="mobile-panel-info">Ver info</button>
+            </div>
+          `;
+          document.getElementById('mobile-panel-speed')?.addEventListener('click', () => {
+            // Aquí se podría abrir el carrusel de velocidad dentro del panel
+            content.innerHTML = '<div class="p-2">Carrusel de velocidad (implementar)</div>';
+          });
+          document.getElementById('mobile-panel-timer')?.addEventListener('click', () => {
+            renderTimerMobilePanel(content);
+          });
+        } else if (section === 'timer') {
+          renderTimerMobilePanel(content);
+        }
+      };
+
+      const renderTimerMobilePanel = (container) => {
+        if (PlayerState.timer) {
+          const remaining = Math.max(0, (PlayerState.timer.endTime - Date.now()) / 1000);
+          container.innerHTML = `
+            <div class="text-center py-8">
+              <div class="text-5xl font-bold text-primary mb-6">${formatTime(remaining)}</div>
+              <button id="mobile-cancel-timer" class="bg-white text-black px-6 py-2 rounded-full font-medium mr-2">Desactivar</button>
+              ${PlayerState.timer.type !== 'end' ? '<button id="mobile-add5min" class="border border-white px-6 py-2 rounded-full font-medium">+5 min</button>' : ''}
+            </div>
+          `;
+          document.getElementById('mobile-cancel-timer')?.addEventListener('click', cancelTimer);
+          document.getElementById('mobile-add5min')?.addEventListener('click', addFiveMinutes);
+        } else {
+          container.innerHTML = `
+            <div class="p-2">
+              <h4 class="font-medium mb-4">Temporizador</h4>
+              <div class="space-y-2">
+                ${[5,10,15,30,45,60].map(m => `<button class="mobile-timer-option block w-full text-left p-3 bg-slate-800 rounded" data-min="${m}">${m} minutos</button>`).join('')}
+                <button class="mobile-timer-option block w-full text-left p-3 bg-slate-800 rounded" data-end="end">Fin del episodio</button>
+              </div>
+            </div>
+          `;
+          document.querySelectorAll('.mobile-timer-option').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const min = btn.dataset.min;
+              if (min) startTimer(parseInt(min), 'countdown');
+              else if (btn.dataset.end) startTimer(0, 'end');
+            });
+          });
+        }
       };
 
       init();
@@ -1104,7 +1233,7 @@
   <style>
     .custom-scroll::-webkit-scrollbar { width: 6px; }
     .custom-scroll::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
-    .fill-1 { font-variation-settings: 'FILL' 1; }
+    .text-shadow { text-shadow: 0 2px 4px rgba(0,0,0,0.5); }
   </style>
 </body>
 </html>
