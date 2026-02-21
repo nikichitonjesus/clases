@@ -1,1322 +1,1326 @@
-<meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>StreamHub - Ultimate Feed</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;700;800&amp;display=swap" rel="stylesheet">
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=yes">
+    <title>Video SPA · Reproductor</title>
     <style>
-    body { font-family: 'Plus Jakarta Sans', sans-serif; background: #050505; color: white; overflow-x: hidden; }
-  
-    /* Utilidades */
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-   
-    /* --- BOTONES DE CONTROL CARRUSEL --- */
-    .nav-btn {
-        position: absolute; top: 0; bottom: 0; z-index: 40; width: 60px;
-        display: none; align-items: center; justify-content: center;
-        transition: opacity 0.3s;
-    }
-    .nav-btn.left { left: 0; background: linear-gradient(to right, #050505 0%, transparent 100%); }
-    .nav-btn.right { right: 0; background: linear-gradient(to left, #050505 0%, transparent 100%); }
-    .nav-btn button {
-        background: rgba(255,255,255,0.1); backdrop-filter: blur(10px);
-        border-radius: 50%; width: 40px; height: 40px; border: 1px solid rgba(255,255,255,0.1);
-        color: white; font-size: 20px; transition: transform 0.2s, background 0.2s;
-    }
-    .nav-btn button:hover { background: rgba(255,255,255,0.3); transform: scale(1.1); }
-    @media (min-width: 1024px) { .carousel-wrapper:hover .nav-btn { display: flex; } }
-   
-    /* --- ESTILOS DE TARJETAS (FEED) --- */
-    .card-std { min-width: 200px; width: 200px; display: flex; flex-direction: column; gap: 10px; cursor: pointer; position: relative; }
-    .card-video {
-        height: 220px; width: 220px; flex-shrink: 0; position: relative; overflow: hidden; border-radius: 12px;
-        transition: width 0.5s cubic-bezier(0.25, 1, 0.5, 1); cursor: pointer;
-    }
-    @media (min-width: 1024px) { .card-video:hover { width: 390px; } }
-    .card-list-group { min-width: 340px; display: flex; flex-direction: column; gap: 16px; }
-    .list-item { display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 8px; transition: background 0.2s; cursor: pointer; }
-    .list-item:hover { background: rgba(255,255,255,0.08); }
-   
-    /* --- INTERACCIÓN --- */
-    .overlay-full {
-        position: absolute; inset: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(2px);
-        opacity: 0; transition: opacity 0.3s; display: flex; align-items: center; justify-content: center; gap: 12px; border-radius: 12px;
-    }
-    .group:hover .overlay-full { opacity: 1; }
-    .overlay-mini {
-        position: absolute; inset: 0; background: rgba(0,0,0,0.4); opacity: 0; transition: opacity 0.2s;
-        display: flex; align-items: center; justify-content: center; border-radius: 4px;
-    }
-    .list-item:hover .overlay-mini { opacity: 1; }
-   
-    /* Iconos */
-    .action-icon { width: 36px; height: 36px; transition: transform 0.2s, opacity 0.3s; cursor: pointer; pointer-events: auto; }
-    .action-icon:hover { transform: scale(1.15); }
-    .play-icon-lg { width: 56px; height: 56px; transition: transform 0.2s; cursor: pointer; pointer-events: auto; }
-    .play-icon-lg:hover { transform: scale(1.1); }
-    .play-icon-sm { 
-        width: 28px; 
-        height: 28px; 
-        /* filter: invert(1); */ /* Comentado para que quede blanco natural */
-        pointer-events: auto; 
-    }
-   
-    /* Grid View Card */
-    .grid-card { width: 100%; display: flex; flex-direction: column; gap: 10px; cursor: pointer; position: relative; }
-    .grid-card .aspect-square { border-radius: 12px; overflow: hidden; position: relative; }
-   
-    /* BÚSQUEDA MEJORADA PARA DESKTOP */
-    .desktop-search-container {
-        position: relative;
-    }
-   
-    .desktop-search-results {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        right: 0;
-        background: rgba(10, 10, 10, 0.98);
-        backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 12px;
-        margin-top: 8px;
-        padding: 12px;
-        max-height: 400px;
-        overflow-y: auto;
-        z-index: 1000;
-        display: none;
-        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
-    }
-   
-    .desktop-search-results.active {
-        display: block;
-        animation: fadeIn 0.2s ease;
-    }
-   
-    @keyframes fadeIn {
-        from { opacity: 0; transform: translateY(-10px); }
-        to { opacity: 1; transform: translateY(0); }
-    }
-   
-    .search-result-item {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        padding: 10px;
-        border-radius: 8px;
-        cursor: pointer;
-        transition: background 0.2s;
-    }
-   
-    .search-result-item:hover {
-        background: rgba(255, 255, 255, 0.1);
-    }
-   
-    /* BOTÓN PLAY PARA MÓVIL */
-    .mobile-play-button {
-        position: absolute;
-        bottom: 8px;
-        right: 8px;
-        width: 32px;
-        height: 32px;
-        background: rgba(0, 0, 0, 0.7);
-        border-radius: 50%;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        z-index: 30;
-        pointer-events: auto;
-    }
-   
-    .mobile-play-button img {
-        width: 16px;
-        height: 16px;
-        /* filter: invert(1); */  /* Comentado → ahora el ícono se ve blanco como el SVG original */
-    }
-   
-    @media (min-width: 1024px) {
-        .mobile-play-button {
+        /* ===== RESET Y VARIABLES ===== */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        }
+        body {
+            background: #0a0f1e;
+            color: #eef2fb;
+            overflow-x: hidden;
+        }
+        :root {
+            --header-height: 64px;
+            --footer-mobile-height: 60px;
+            --primary: #032D59;
+            --accent: #4f9fff;
+            --bg-dark: #0f1423;
+            --card-bg: #1a1f30;
+            --border-light: #2a2f42;
+        }
+        a {
+            color: inherit;
+            text-decoration: none;
+        }
+        /* ===== HEADER FIJO ===== */
+        .header {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: var(--header-height);
+            background: var(--primary);
+            display: flex;
+            align-items: center;
+            padding: 0 16px;
+            gap: 12px;
+            z-index: 1200;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+        }
+        .menu-btn {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+        .menu-btn:hover { background: rgba(255,255,255,0.15); }
+        .logo {
+            height: 40px;
+            width: auto;
+            margin-right: 8px;
+        }
+        .search-bar {
+            flex: 1;
+            max-width: 600px;
+            display: flex;
+            background: rgba(255,255,255,0.15);
+            border-radius: 40px;
+            padding: 4px 12px;
+            align-items: center;
+            margin: 0 12px;
+        }
+        .search-bar input {
+            background: transparent;
+            border: none;
+            color: white;
+            width: 100%;
+            padding: 8px 4px;
+            outline: none;
+            font-size: 0.95rem;
+        }
+        .search-bar input::placeholder { color: #a0a8c0; }
+        .search-bar button {
+            background: none;
+            border: none;
+            color: white;
+            cursor: pointer;
+            font-size: 1.2rem;
+            padding: 4px 8px;
+        }
+        .user-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        .user-actions button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 8px;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s;
+        }
+        .user-actions button:hover { background: rgba(255,255,255,0.15); }
+        .avatar {
+            background: #4a6fa5;
+            border-radius: 50%;
+            font-weight: bold;
+        }
+
+        /* ===== PANEL LATERAL ===== */
+        .side-panel {
+            position: fixed;
+            top: 0;
+            left: -300px;
+            width: 280px;
+            height: 100vh;
+            background: #0b1225;
+            z-index: 1300;
+            transition: left 0.3s ease;
+            padding: 80px 16px 24px;
+            box-shadow: 4px 0 20px rgba(0,0,0,0.6);
+            overflow-y: auto;
+        }
+        .side-panel.open { left: 0; }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            z-index: 1250;
             display: none;
         }
-    }
-   
-    /* Búsqueda móvil mejorada */
-    #mobileSearchBar {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        z-index: 9999;
-        transform: translateY(-100%);
-        transition: transform 0.3s ease;
-    }
-    #mobileSearchBar.open {
-        transform: translateY(0);
-    }
-    .search-overlay {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0, 0, 0, 0.8);
-        backdrop-filter: blur(8px);
-        z-index: 9998;
-        opacity: 0;
-        visibility: hidden;
-        transition: opacity 0.3s ease, visibility 0.3s ease;
-    }
-    .search-overlay.active {
-        opacity: 1;
-        visibility: visible;
-    }
-   
-    /* Móvil Disable Hovers */
-    @media (max-width: 1023px) {
-        .overlay-full, .overlay-mini, .nav-btn { display: none !important; }
-    }
-</style>
+        .overlay.show { display: block; }
+        .side-panel nav a {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 14px 16px;
+            border-radius: 12px;
+            color: #ddd;
+            font-size: 1.1rem;
+            transition: background 0.2s;
+            margin-bottom: 4px;
+        }
+        .side-panel nav a:hover {
+            background: #1f2a44;
+            color: white;
+        }
+        .side-panel nav a i { width: 24px; font-size: 1.3rem; }
 
+        /* ===== CONTENIDO PRINCIPAL ===== */
+        .main-content {
+            margin-top: var(--header-height);
+            padding: 20px;
+            min-height: calc(100vh - var(--header-height));
+            transition: filter 0.2s;
+        }
+        /* Ajuste para móvil con barra inferior */
+        @media (max-width: 768px) {
+            .main-content { padding-bottom: calc(var(--footer-mobile-height) + 20px); }
+        }
 
-    
-    <div class="search-overlay" id="searchOverlay" onclick="closeSearch()"></div>
-    
-    
-    <header id="top-header" class="sticky top-0 z-50 bg-[#050505]/80 backdrop-blur-xl border-b border-white/5">
-        <div class="max-w-[1600px] mx-auto px-6 py-4 flex items-center justify-between" id="header-container">
-            
-            <a href="/" class="flex items-center gap-2">
-                <img src="https://media.baltaanay.org/web/image/885-f3d79ca9/xhbalta-aula.png" alt="StreamHub Logo" class="w-8 h-8 rounded-lg object-cover" loading="lazy">
-                <span class="text-xl font-bold text-white">Media</span>
-            </a>
+        /* ===== FILTROS DESLIZABLES ===== */
+        .filters-container {
+            position: relative;
+            margin-bottom: 28px;
+        }
+        .filters-scroll {
+            display: flex;
+            gap: 12px;
+            overflow-x: auto;
+            scroll-behavior: smooth;
+            padding: 4px 0 12px;
+            -webkit-overflow-scrolling: touch;
+            scrollbar-width: thin;
+        }
+        .filters-scroll::-webkit-scrollbar { height: 4px; background: #2f354a; border-radius: 4px; }
+        .filters-scroll::-webkit-scrollbar-thumb { background: #5f6a8a; border-radius: 4px; }
+        .filter-chip {
+            background: #1e2538;
+            color: #ccd6f0;
+            padding: 8px 20px;
+            border-radius: 32px;
+            font-size: 0.9rem;
+            font-weight: 500;
+            white-space: nowrap;
+            cursor: pointer;
+            border: 1px solid #323b55;
+            transition: all 0.2s;
+            user-select: none;
+        }
+        .filter-chip.active {
+            background: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+        .scroll-btn {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            width: 40px;
+            background: rgba(10,15,30,0.8);
+            border: none;
+            color: white;
+            font-size: 24px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+            backdrop-filter: blur(4px);
+            opacity: 0;
+            transition: opacity 0.2s;
+            border-radius: 20px;
+        }
+        .filters-container:hover .scroll-btn { opacity: 1; }
+        .scroll-btn.left { left: 0; }
+        .scroll-btn.right { right: 0; }
+        @media (max-width: 768px) { .scroll-btn { display: none; } }
 
-            
-            <div class="hidden lg:flex items-center gap-4 desktop-search-container">
-                <div class="relative">
-                    <input type="text" id="desktopSearch" placeholder="Buscar episodios, series..." class="bg-white/10 border border-white/20 rounded-full px-4 py-2 pl-10 text-sm w-64 focus:outline-none focus:ring-2 focus:ring-blue-500" oninput="handleDesktopSearchInput(this.value)" onkeypress="if(event.key === 'Enter') handleDesktopSearchEnter(event)" onfocus="showDesktopSearchResults()">
-                    <img src="https://media.baltaanay.org/web/image/793-902e5b33/Search%20%282%29.png" alt="Buscar" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4" loading="lazy">
-                </div>
-                
-                <div class="desktop-search-results" id="desktopSearchResults">
-                    <div id="desktopSearchResultsContent"></div>
-                </div>
-                <a href="/my/home" class="text-sm font-bold text-gray-400 hover:text-white">Iniciar sesión</a>
-            </div>
+        /* ===== GRID DE EPISODIOS ===== */
+        .episodes-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 24px 16px;
+        }
+        @media (max-width: 1024px) { .episodes-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media (max-width: 768px) { .episodes-grid { grid-template-columns: 1fr; } }
+        .episode-card {
+            cursor: pointer;
+            transition: transform 0.15s;
+        }
+        .episode-card:hover { transform: scale(1.02); }
+        .thumbnail {
+            position: relative;
+            aspect-ratio: 16 / 9;
+            background: #1e1e2f;
+            border-radius: 12px;
+            overflow: hidden;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.6);
+        }
+        .thumbnail img {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+        .episode-title {
+            margin-top: 10px;
+            font-weight: 500;
+            font-size: 1rem;
+            color: #f0f4ff;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .episode-title span:last-child { color: #9aa5c9; font-size: 0.8rem; }
 
-            
-            <div class="flex items-center gap-4">
-                <button onclick="toggleMobileSearch()" class="lg:hidden text-gray-400 hover:text-white">
-                    <img src="https://media.baltaanay.org/web/image/793-902e5b33/Search%20%282%29.png" alt="Buscar" class="w-5 h-5" loading="lazy">
-                </button>
-                <a href="/novedades" class="relative text-gray-400 hover:text-white">
-                    <img src="https://media.baltaanay.org/web/image/796-aee658de/Explore.png" alt="Notificaciones" class="w-5 h-5" loading="lazy">
-                    <span class="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-                </a>
-                <a href="/my/home" class="w-8 h-8 bg-gradient-to-br from-blue-400 to-purple-500 rounded-full overflow-hidden">
-                    <img src="https://media.baltaanay.org/web/image/793-902e5b33/Search%20%282%29.png" alt="Usuario" class="w-full h-full object-cover" loading="lazy">
-                </a>
-            </div>
+        /* ===== REPRODUCTOR ===== */
+        .player-section {
+            margin-bottom: 30px;
+            display: none; /* se muestra cuando hay un video activo */
+        }
+        .player-container {
+            position: relative;
+            background: black;
+            border-radius: 20px;
+            overflow: hidden;
+            box-shadow: 0 20px 30px rgba(0,0,0,0.8);
+        }
+        .player-video {
+            width: 100%;
+            display: block;
+            background: black;
+        }
+        /* altura adaptable */
+        .player-container {
+            aspect-ratio: 16 / 9;
+            max-height: 70vh;
+        }
+        @media (max-width: 768px) {
+            .player-container { aspect-ratio: 16 / 9; max-height: 35vh; }
+        }
+        /* botón salir */
+        .close-player {
+            position: absolute;
+            top: 16px;
+            right: 20px;
+            background: rgba(0,0,0,0.6);
+            border: none;
+            color: white;
+            font-size: 28px;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            z-index: 50;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        /* controles centrales */
+        .center-controls {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            gap: 30px;
+            align-items: center;
+            background: rgba(10,10,20,0.7);
+            padding: 12px 30px;
+            border-radius: 60px;
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255,255,255,0.15);
+            z-index: 40;
+        }
+        .center-controls button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 2rem;
+            width: 56px;
+            height: 56px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 50%;
+            transition: background 0.2s;
+        }
+        .center-controls button:hover { background: rgba(255,255,255,0.2); }
+        .center-controls img { width: 32px; height: 32px; filter: brightness(1.2); }
+
+        /* barra inferior de controles */
+        .player-controls-bottom {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: linear-gradient(0deg, rgba(0,0,0,0.9) 0%, transparent 100%);
+            padding: 16px 20px 12px;
+            z-index: 30;
+        }
+        .progress-bar {
+            width: 100%;
+            height: 5px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 6px;
+        }
+        .progress-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 5px;
+            width: 0%;
+        }
+        .time-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.8rem;
+            color: #ccc;
+            margin-bottom: 8px;
+        }
+        .bottom-buttons {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .left-buttons, .right-buttons {
+            display: flex;
+            gap: 18px;
+            align-items: center;
+        }
+        .bottom-buttons button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.3rem;
+            cursor: pointer;
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            transition: background 0.2s;
+            position: relative;
+        }
+        .bottom-buttons button:hover { background: rgba(255,255,255,0.2); }
+        .bottom-buttons img { width: 22px; height: 22px; filter: brightness(1.2); }
+        /* sliders hover (volumen, velocidad) */
+        .slider-popup {
+            position: absolute;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1a1f30;
+            padding: 12px 16px;
+            border-radius: 30px;
+            display: none;
+            white-space: nowrap;
+            box-shadow: 0 5px 15px black;
+            border: 1px solid #3f4a6b;
+        }
+        .has-popup:hover .slider-popup { display: block; }
+        .slider-popup input { width: 120px; cursor: pointer; }
+
+        /* info bajo el reproductor */
+        .player-meta {
+            padding: 20px 0 10px;
+        }
+        .title-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 15px;
+        }
+        .title-row h2 { font-size: 1.5rem; }
+        .action-buttons {
+            display: flex;
+            gap: 18px;
+        }
+        .action-buttons button {
+            background: none;
+            border: none;
+            color: white;
+            font-size: 1.2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 4px;
+            cursor: pointer;
+            background: #1e253a;
+            padding: 8px 14px;
+            border-radius: 40px;
+        }
+        .action-buttons img { width: 22px; height: 22px; }
+        .description {
+            margin: 20px 0;
+            background: #121728;
+            padding: 18px;
+            border-radius: 18px;
+            line-height: 1.5;
+        }
+        .description .full { display: none; }
+        .description.expanded .short { display: none; }
+        .description.expanded .full { display: inline; }
+        .read-more-btn {
+            background: none;
+            border: none;
+            color: var(--accent);
+            font-weight: 600;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        /* carruseles */
+        .section-title {
+            font-size: 1.3rem;
+            margin: 30px 0 16px;
+        }
+        .carousel {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            padding: 8px 0 16px;
+            scrollbar-width: thin;
+        }
+        .carousel .episode-card {
+            flex: 0 0 220px;
+        }
+        @media (max-width: 768px) {
+            .carousel .episode-card { flex: 0 0 160px; }
+        }
+        /* PIP flotante */
+        .pip-player {
+            position: fixed;
+            bottom: 80px;
+            right: 20px;
+            width: 280px;
+            border-radius: 16px;
+            overflow: hidden;
+            box-shadow: 0 10px 30px black;
+            z-index: 1100;
+            display: none;
+            border: 2px solid var(--accent);
+            background: black;
+        }
+        @media (max-width: 768px) {
+            .pip-player { bottom: 70px; width: 200px; }
+        }
+        .pip-player video { width: 100%; display: block; }
+
+        /* ===== VISTAS (EXPLORAR, NOVEDADES, BIBLIOTECA) ===== */
+        .view { display: none; }
+        .view.active { display: block; }
+
+        /* Novedades: top10 carrusel + grid */
+        .top10-carousel {
+            display: flex;
+            gap: 16px;
+            overflow-x: auto;
+            margin: 20px 0;
+        }
+        .top10-item { flex: 0 0 180px; }
+
+        /* Biblioteca: secciones */
+        .lib-section {
+            background: #131826;
+            border-radius: 24px;
+            padding: 20px;
+            margin-bottom: 30px;
+        }
+        .lib-header {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 16px;
+        }
+        .btn-outline {
+            background: none;
+            border: 1px solid #5b6b9a;
+            padding: 6px 16px;
+            border-radius: 30px;
+            color: white;
+            cursor: pointer;
+        }
+
+        /* ===== BARRA INFERIOR MÓVIL (proporcionada) ===== */
+        .mobile-bottom-nav {
+            display: none;
+            position: fixed;
+            bottom: env(safe-area-inset-bottom);
+            left: 0;
+            width: 100%;
+            height: 60px;
+            background: #032D59;
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            z-index: 1000;
+            padding: 0 4px;
+            box-sizing: border-box;
+        }
+        .mobile-bottom-nav .nav-items {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 100%;
+            width: 100%;
+        }
+        .mobile-bottom-nav .nav-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: #FFFFFF;
+            text-decoration: none;
+            font-size: 11px;
+            font-weight: 500;
+            transition: transform 0.2s ease, background-color 0.2s ease;
+            border-radius: 8px;
+            flex: 1;
+            min-width: 0;
+            gap: 2px;
+        }
+        .mobile-bottom-nav .nav-item:hover,
+        .mobile-bottom-nav .nav-item:active {
+            transform: scale(1.05);
+            background: rgba(0, 0, 0, 0.3);
+        }
+        .mobile-bottom-nav .nav-item img {
+            width: 22px;
+            height: 22px;
+            flex-shrink: 0;
+            filter: brightness(1.2);
+        }
+        .mobile-bottom-nav .nav-item span {
+            line-height: 1.1;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            flex-shrink: 0;
+        }
+        @media only screen and (max-width: 768px) {
+            .mobile-bottom-nav { display: block; }
+        }
+        @media only screen and (max-width: 320px) {
+            .mobile-bottom-nav .nav-item { font-size: 10px; gap: 2px; padding: 0 4px; }
+            .mobile-bottom-nav .nav-item img { width: 24px; height: 24px; }
+            .mobile-bottom-nav { padding: 0 2px; }
+        }
+        @media only screen and (min-width: 321px) and (max-width: 480px) {
+            .mobile-bottom-nav .nav-item { font-size: 11px; gap: 3px; padding: 0 6px; }
+            .mobile-bottom-nav .nav-item img { width: 22px; height: 22px; }
+        }
+        @media only screen and (min-width: 481px) and (max-width: 768px) {
+            .mobile-bottom-nav .nav-item { font-size: 12px; gap: 4px; padding: 0 8px; }
+            .mobile-bottom-nav .nav-item img { width: 26px; height: 26px; }
+            .mobile-bottom-nav { padding: 0 6px; }
+        }
+    </style>
+    <!-- Iconos (usamos emoji temporalmente, pero puedes usar los enlaces dados en los botones) -->
+</head>
+<body>
+    <!-- HEADER FIJO -->
+    <header class="header">
+        <button class="menu-btn" id="menuToggle">☰</button>
+        <img class="logo" src="https://via.placeholder.com/100x40/032D59/ffffff?text=LOGO" alt="Logo">
+        <div class="search-bar">
+            <input type="text" placeholder="Buscar episodios...">
+            <button>🔍</button>
+        </div>
+        <div class="user-actions">
+            <button>🔔</button>
+            <button class="avatar">👤</button>
         </div>
     </header>
 
-    
-    <div id="mobileSearchBar" class="lg:hidden bg-[#050505] p-4 border-b border-white/10">
-        <div class="flex items-center gap-3">
-            <img src="https://media.baltaanay.org/web/image/793-902e5b33/Search%20%282%29.png" alt="Buscar" class="w-5 h-5" loading="lazy">
-            <input type="text" id="mobileSearchInput" placeholder="Buscar episodios, series..." class="flex-1 bg-transparent border-none text-white text-lg focus:outline-none placeholder-gray-500" oninput="handleMobileSearchInput(this.value)" onkeypress="if(event.key === 'Enter') handleMobileSearchEnter(event)">
-            <button onclick="handleMobileSearchButton()" class="text-white px-3 py-1 bg-blue-600 rounded-md text-sm">Buscar</button>
-            <button onclick="toggleMobileSearch()" class="text-white text-xl">×</button>
-        </div>
-        
-        <div id="mobileSearchResults" class="mt-4 max-h-[60vh] overflow-y-auto"></div>
+    <!-- PANEL LATERAL -->
+    <div class="overlay" id="overlay"></div>
+    <aside class="side-panel" id="sidePanel">
+        <nav>
+            <a href="#" data-view="inicio"><i>🏠</i> Inicio</a>
+            <a href="#" data-view="explorar"><i>🔍</i> Explorar</a>
+            <a href="#" data-view="novedades"><i>✨</i> Novedades</a>
+            <a href="#" data-view="biblioteca"><i>📚</i> Biblioteca</a>
+        </nav>
+    </aside>
+
+    <!-- PIP FLOTANTE -->
+    <div class="pip-player" id="pipPlayer">
+        <video id="pipVideo"></video>
     </div>
-    
-    
-    <div class="sticky top-0 z-40 bg-[#050505]/95 backdrop-blur-xl border-b border-white/5" id="category-filters">
-        <div class="py-3 overflow-x-auto no-scrollbar">
-            <div class="max-w-[1600px] mx-auto px-6 flex items-center gap-3" id="category-pills"></div>
-        </div>
-    </div>
-    
-    
-    <main class="max-w-[1600px] mx-auto px-6 mt-4 min-h-screen">
-        <div id="feed-view" class="space-y-12 transition-opacity duration-300">
-            
-        </div>
-        <div id="grid-view" class="hidden transition-opacity duration-300">
-            <div class="flex items-center justify-between mb-8 mt-6">
-                <h2 id="grid-title" class="text-2xl font-bold">Resultados</h2>
-                <button onclick="showFeed()" class="text-sm font-bold text-gray-400 hover:text-white flex items-center gap-1">
-                    <span class="text-xl">×</span> Cerrar búsqueda
-                </button>
+
+    <!-- CONTENIDO PRINCIPAL -->
+    <main class="main-content" id="mainContent">
+        <!-- VISTA INICIO (FEED) -->
+        <div id="viewInicio" class="view active">
+            <div class="filters-container">
+                <button class="scroll-btn left" id="filterScrollLeft">‹</button>
+                <div class="filters-scroll" id="filterScroll"></div>
+                <button class="scroll-btn right" id="filterScrollRight">›</button>
             </div>
-            <div id="results-grid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6"></div>
-            <div id="empty-state" class="hidden py-10 text-center">
-                <p class="text-gray-400 text-lg mb-8" id="empty-msg">No encontramos nada...</p>
-                <h3 class="text-xl font-bold mb-6 text-white">Quizás te interese esto:</h3>
-                <div id="recommendations-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6"></div>
+            <div class="episodes-grid" id="episodesGrid"></div>
+        </div>
+
+        <!-- VISTA EXPLORAR (búsqueda) -->
+        <div id="viewExplorar" class="view">
+            <h2 style="margin-bottom:20px">Explorar</h2>
+            <input type="text" placeholder="Buscar..." style="width:100%; padding:15px; background:#1f253a; border:none; border-radius:60px; color:white; margin-bottom:30px;" id="searchInput">
+            <div class="episodes-grid" id="searchResults"></div>
+        </div>
+
+        <!-- VISTA NOVEDADES -->
+        <div id="viewNovedades" class="view">
+            <h2>Top 10</h2>
+            <div class="top10-carousel" id="top10Carousel"></div>
+            <h2 style="margin-top:40px">Últimos episodios</h2>
+            <div class="episodes-grid" id="latestGrid"></div>
+        </div>
+
+        <!-- VISTA BIBLIOTECA -->
+        <div id="viewBiblioteca" class="view">
+            <div class="lib-section">
+                <div class="lib-header"><h3>En progreso</h3></div>
+                <div class="carousel" id="progressCarousel"></div>
+            </div>
+            <div class="lib-section">
+                <div class="lib-header"><h3>Favoritos</h3><button class="btn-outline" id="reorderFavs">Reordenar</button></div>
+                <div class="episodes-grid" id="favoritesGrid"></div>
+                <button class="btn-outline" style="margin-top:16px" id="viewAllFavs">Ver todo</button>
+            </div>
+            <div class="lib-section">
+                <div class="lib-header"><h3>Historial</h3><button class="btn-outline" id="clearHistory">Vaciar</button></div>
+                <div class="episodes-grid" id="historyGrid"></div>
+            </div>
+        </div>
+
+        <!-- SECCIÓN REPRODUCTOR (se inyecta cuando se reproduce algo) -->
+        <div id="playerSection" class="player-section">
+            <div class="player-container">
+                <video id="mainVideo" class="player-video" controlslist="nodownload" disablepictureinpicture></video>
+                <button class="close-player" id="closePlayerBtn">✕</button>
+                <!-- Controles centrales -->
+                <div class="center-controls">
+                    <button id="seekBack"><img src="https://www.nikichitonjesus.com/web/image/438-deea748f/-10.webp" alt="-10"></button>
+                    <button id="playPauseBtn"><img id="playPauseIcon" src="https://nikichitonjesus.odoo.com/web/image/715-d5d403f0/playvid.png" alt="play"></button>
+                    <button id="seekForward"><img src="https://www.nikichitonjesus.com/web/image/439-9448d521/%2B10.webp" alt="+10"></button>
+                </div>
+                <!-- Barra inferior -->
+                <div class="player-controls-bottom">
+                    <div class="progress-bar" id="progressBar"><div class="progress-fill" id="progressFill"></div></div>
+                    <div class="time-row"><span id="currentTime">0:00</span><span id="duration">0:00</span></div>
+                    <div class="bottom-buttons">
+                        <div class="left-buttons">
+                            <button id="prevBtn"><img src="https://video-nikichitonjesus.odoo.com/web/image/437-b1fd1bf4/anterior.webp" alt="anterior"></button>
+                            <button id="nextBtn"><img src="https://video-nikichitonjesus.odoo.com/web/image/443-aa8bad56/otro.webp" alt="siguiente"></button>
+                            <div class="has-popup">
+                                <button id="volumeBtn"><img id="volumeIcon" src="https://nikichitonjesus.odoo.com/web/image/587-e4437449/volumen.png" alt="volumen"></button>
+                                <div class="slider-popup"><input type="range" id="volumeSlider" min="0" max="1" step="0.05" value="1"></div>
+                            </div>
+                            <div class="has-popup">
+                                <button id="speedBtn"><img src="https://nikichitonjesus.odoo.com/web/image/637-65e36988/speed.png" alt="velocidad"></button>
+                                <div class="slider-popup"><input type="range" id="speedSlider" min="0.5" max="2" step="0.1" value="1"></div>
+                            </div>
+                        </div>
+                        <div class="right-buttons">
+                            <button id="lockBtn">🔓</button>
+                            <button id="fullscreenBtn"><img id="fullscreenIcon" src="https://nikichitonjesus.odoo.com/web/image/622-49c31be4/full.png" alt="full"></button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Metadatos del episodio -->
+            <div class="player-meta">
+                <div class="title-row">
+                    <h2 id="videoTitle"></h2>
+                    <div class="action-buttons">
+                        <button id="favBtn"><img src="https://video-nikichitonjesus.odoo.com/web/image/445-ad116cfc/episodios.webp" alt="favorito"><span>Favorito</span></button>
+                        <button id="shareBtn"><img src="https://nikichitonjesus.odoo.com/web/image/585-036b7961/cpmartir.png" alt="compartir"><span>Compartir</span></button>
+                        <button id="downloadBtn"><img src="https://nikichitonjesus.odoo.com/web/image/624-ec376d7f/descargar.png" alt="descargar"><span>Descargar</span></button>
+                        <button id="embedBtn"><img src="https://video-nikichitonjesus.odoo.com/web/image/622-10442ee4/pip.webp" alt="incrustar"><span>Incrustar</span></button>
+                    </div>
+                </div>
+                <div class="description" id="descriptionBox">
+                    <span class="short" id="descShort"></span>
+                    <span class="full" id="descFull"></span>
+                    <button class="read-more-btn" id="readMoreBtn">Leer más</button>
+                </div>
+                <!-- Carrusel de serie (si aplica) -->
+                <div id="serieCarouselContainer" style="display:none;">
+                    <h3 class="section-title">Siguientes de la serie</h3>
+                    <div class="carousel" id="serieCarousel"></div>
+                </div>
+                <!-- Relacionados aleatorios -->
+                <h3 class="section-title">Relacionados</h3>
+                <div class="carousel" id="relatedCarousel"></div>
             </div>
         </div>
     </main>
 
-<script>
-// --- ICONOS ACTUALIZADOS ---
-const ICONS = {
-    play: 'https://marca1.odoo.com/web/image/508-f876320c/play.svg',
-    add: 'https://marca1.odoo.com/web/image/509-c555b4ef/a%C3%B1adir%20a.svg',
-    added: 'https://nikichitonjesus.odoo.com/web/image/1112-d141b3eb/a%C3%B1adido.png',
-    dl: 'https://marca1.odoo.com/web/image/510-7a9035c1/descargar.svg',
-    noDl: 'https://nikichitonjesus.odoo.com/web/image/1051-622a3db3/no-desc.webp'
-};
+    <!-- BARRA INFERIOR MÓVIL (se inyecta por JS, pero la dejamos fija en HTML para simplificar) -->
+    <div class="mobile-bottom-nav">
+        <div class="nav-items">
+            <a href="#" class="nav-item" data-view="inicio" title="Home">
+                <img src="https://media.baltaanay.org/web/image/798-1b947c8d/Home%20%282%29.webp" alt="Home" loading="lazy">
+                <span>Home</span>
+            </a>
+            <a href="#" class="nav-item" data-view="explorar" title="Explorar">
+                <img src="https://www.baltaanay.org/web/image/986-2bf9d2bb/Search%20%282%29.webp" alt="Explorar" loading="lazy">
+                <span>Explorar</span>
+            </a>
+            <a href="#" class="nav-item" title="Cargar">
+                <img src="https://www.baltaanay.org/web/image/991-1c3c204a/subir.webp" alt="Cargar" loading="lazy">
+                <span>Cargar</span>
+            </a>
+            <a href="#" class="nav-item" title="Solicitar">
+                <img src="https://www.baltaanay.org/web/image/922-f3d79ca9/xhbalta-aula.png" alt="Solicitar" loading="lazy">
+                <span>Solicitar</span>
+            </a>
+            <a href="#" class="nav-item" title="Usuario">
+                <img src="https://nikichitonjesus3.odoo.com/web/image/453-f4d8c1eb/user.png" alt="Usuario" loading="lazy">
+                <span>Portal</span>
+            </a>
+        </div>
+    </div>
 
-// --- CATEGORÍAS EDUCATIVAS ---
-const CATEGORIES = [
-    "Todos",
-    "Derecho",
-    "Física y Astronomía",
-    "Matemáticas",
-    "Historia",
-    "Filosofía",
-    "Economía y Finanzas",
-    "Ciencias Sociales",
-    "Arte y Cultura",
-    "Literatura y Audiolibros",
-    "Cine y TV",
-    "Documentales",
-    "Ciencias Naturales",
-    "Tecnología e Informática",
-    "Otras Ciencias"
-];
+    <script>
+        (function(){
+            // ----------------------------------------------
+            // 1. DATOS MOCK (EPISODIOS)
+            // ----------------------------------------------
+            const VIDEOS = [
+                { id: 1, titulo: 'Introducción a la serie A', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?1', cover: 'https://picsum.photos/320/180?1', descripcion: 'Primer episodio de la serie A. Explicación inicial.', serie: 'Serie A' },
+                { id: 2, titulo: 'Segundo paso en la serie A', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?2', cover: 'https://picsum.photos/320/180?2', descripcion: 'Continuación de la serie A.', serie: 'Serie A' },
+                { id: 3, titulo: 'Episodio suelto 1', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?3', cover: 'https://picsum.photos/320/180?3', descripcion: 'Este es un episodio independiente.', serie: false },
+                { id: 4, titulo: 'Episodio suelto 2', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?4', cover: 'https://picsum.photos/320/180?4', descripcion: 'Otro episodio sin serie.', serie: false },
+                { id: 5, titulo: 'Serie B - Capítulo 1', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?5', cover: 'https://picsum.photos/320/180?5', descripcion: 'Inicio de la serie B.', serie: 'Serie B' },
+                { id: 6, titulo: 'Serie B - Capítulo 2', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?6', cover: 'https://picsum.photos/320/180?6', descripcion: 'Segundo de la serie B.', serie: 'Serie B' },
+                { id: 7, titulo: 'Especial', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?7', cover: 'https://picsum.photos/320/180?7', descripcion: 'Episodio único muy visto.', serie: false },
+                { id: 8, titulo: 'Aventura X', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?8', cover: 'https://picsum.photos/320/180?8', descripcion: 'Contenido variado.', serie: false },
+                { id: 9, titulo: 'Serie C - Piloto', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?9', cover: 'https://picsum.photos/320/180?9', descripcion: 'Primero de la serie C.', serie: 'Serie C' },
+                { id: 10, titulo: 'Serie C - Segundo', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?10', cover: 'https://picsum.photos/320/180?10', descripcion: 'Segundo de la serie C.', serie: 'Serie C' },
+                { id: 11, titulo: 'Serie C - Final', url: 'https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4?11', cover: 'https://picsum.photos/320/180?11', descripcion: 'Final de la serie C.', serie: 'Serie C' },
+            ];
 
-// --- EPISODIOS DE EJEMPLO (mejorados con cover2 para videos) ---
-const USER_EPISODES = [
-    { date: '2025-11-28', type: 'audio', mediaUrl: 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/2025-10-29/413399242-44100-2-2f259e66aeac3.m4a', coverUrl: 'https://s3-us-west-2.amazonaws.com/anchor-generated-image-bank/staging/podcast_uploaded_nologo400/44500417/44500417-1759018829686-8b0dde55850ed.jpg', title: 'La excepción en el proceso de administración de Justicia', description: 'La excepción en el proceso de administración de Justicia', detailUrl: 'https://media.baltaanay.org/teoria-del-proceso', allowDownload: false, author: "Barahona", series: { portada_serie: 'https://media.baltaanay.org/web/image/658-redirect/960bc627aab97e6134955b4d5d1c99d0.jpg', titulo_serie: 'Teoría del proceso', descripcion_serie: 'Proceso en el derecho y la forma de poner en movimiento la maquinaria de Justicia', url_serie: 'https://media.baltaanay.org/teoria-del-proceso' } },
-    { date: '2025-11-28', type: 'audio', mediaUrl: 'https://balta-derecho.odoo.com/documents/content/3L5vYn32Sq-M5sUKB96S1Ao9', coverUrl: 'https://s3-us-west-2.amazonaws.com/anchor-generated-image-bank/staging/podcast_uploaded_nologo400/44500417/44500417-1759018829686-8b0dde55850ed.jpg', title: 'Principios procesales', description: 'La excepción en el proceso de administración de Justicia', detailUrl: 'https://media.baltaanay.org/teoria-del-proceso', allowDownload: false, author: "Barahona", series: { portada_serie: 'https://media.baltaanay.org/web/image/658-redirect/960bc627aab97e6134955b4d5d1c99d0.jpg', titulo_serie: 'Teoría del proceso', descripcion_serie: 'Proceso en el derecho y la forma de poner en movimiento la maquinaria de Justicia', url_serie: 'https://media.baltaanay.org/teoria-del-proceso' } },
-    { date: '2025-11-01', type: 'video', mediaUrl: 'https://lb.s3.odysee.tv/vods2.odysee.live/odysee-replays/84515919a2e010fa2c381702a6777c1035c2deb3/1762812470.mp4', coverUrl: 'https://balta.odoo.com/web/image/417-e2fd48e0/media.webp', title: 'Responsabilidad penal en la adolecencia', description: 'Conferencia de Derechos Humanos. Sobre la responsabilidad penal de la adolecencia, las penas y las medidas de seguridad.', detailUrl: '/ddhh/adolecencia', allowDownload: false, author: "Rony Eulalio", series: { portada_serie: 'https://scout.es/wp-content/uploads/2021/12/186-01.jpg', titulo_serie: 'Derechos Humanos', descripcion_serie: 'Derechos Humanos', url_serie: '/ddhh' } },
-    { date: '2025-11-01', type: 'video', mediaUrl: 'https://lb.s3.odysee.tv/vods2.odysee.live/odysee-replays/84515919a2e010fa2c381702a6777c1035c2deb3/1762807738.mp4', coverUrl: 'https://balta.odoo.com/web/image/417-e2fd48e0/media.webp', title: 'Repaso de DD Procesal Constitucional', description: 'Penultima clase de Derecho Procesal Constitucional 2025', detailUrl: '/procesal-constitucional', allowDownload: false, author: "César Solares", series: { portada_serie: 'https://balta.odoo.com/web/image/417-e2fd48e0/media.webp', titulo_serie: 'Derecho Procesal Constitucional', descripcion_serie: 'Derecho Procesal Constitucional', url_serie: '/procesal-constitucional' } },
-    {
-date: '2026-02-10',
-                mediaUrl: "https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-1-13/418061888-44100-2-bd0c488cd9ace.m4a",
-                type: "audio",
-				coverUrl: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png',
-                title: "Corrientes de la teoría del delito",
-                detailUrl: "ddpp-3/clases",
-                author: "Lemus",
-                text: "Continuación de las corrientes de la teoría del delito. Teoría causalista, finalista y funcionalista.",
-                allowDownload: false,
-                coverUrl: "https://s3-us-west-2.amazonaws.com/anchor-generated-image-bank/staging/podcast_uploaded_episode400/44500417/44500417-1769910530363-7e96ebf855644.jpg", 
-series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png', 
-            titulo_serie: 'Derecho penal 3', 
-            descripcion_serie: 'Derecho Público', 
-            url_serie: 'ddpp-3/clases' 
-        }
-            },
-            {
-date: '2026-02-03',
-                mediaUrl: "https://lb.s3.odysee.tv/vods2.odysee.live/odysee-replays/dd57d90536480f9a751ba4429447fd5f613efce3/1770150346.mp4",
-                type: "video",
-				coverUrl: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png',
-				title: "La teoría causalista",
-                detailUrl: "ddpp-3/clases",
-                author: "Lemus",
-                text: "Desarrollo de la teoría causalista. Derecho Penal 3. Historia, Ciencia.",
-                allowDownload: false,
-                coverUrl: "https://s3-us-west-2.amazonaws.com/anchor-generated-image-bank/staging/podcast_uploaded_episode400/44500417/44500417-1769910530363-7e96ebf855644.jpg", 
-series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png', 
-            titulo_serie: 'Derecho penal 3', 
-            descripcion_serie: 'Derecho Público', 
-            url_serie: 'ddpp-3/clases' 
-        }
-            },
-            {
-date: '2026-01-29',
-                mediaUrl: "https://podcasts.com/api/download-episode/214790939",
-                type: "audio",
-				coverUrl: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png',
-                title: "¿Qué es el Derecho Penal?",
-                author: "Lemus",
-                text: "Conjunto de normas jurídicas de naturaleza pública que regulan los delitos, las penas y las medidas de seguridad. Ciencia pública. Derecho, Historia.",
-                allowDownload: false,
-                detailUrl: "ddpp-3/clases",
-                coverUrlInfo: "https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png", 
-series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png', 
-            titulo_serie: 'Derecho penal 3', 
-            descripcion_serie: 'Derecho Público', 
-            url_serie: 'ddpp-3/clases' 
-        }
-            },
-            {
-date: '2026-02-12',
-            mediaUrl: "https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-1-13/418069738-44100-2-616f210f1eb48.m4a",
-            type: "audio",
-            coverUrl: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png',
-			title: "La tipicidad y los elementos del delito",
-            detailUrl: "ddpp-3/clases",
-            author: "Lemus",
-            text: "Análisis profundo del concepto de tipicidad en derecho y sociedad. Una mirada crítica y actual. Ciencia.",
-            allowDownload: false, 
-series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/925-6ed84678/DERECHO%20PENAL%20III.png', 
-            titulo_serie: 'Derecho penal 3', 
-            descripcion_serie: 'Derecho Público', 
-            url_serie: 'ddpp-3/clases' 
-        }
-        },
-{
-date: '2026-02-06',
-            mediaUrl: "https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-1-13/418064713-44100-2-ed2c58b07cd6.m4a",
-            type: "audio",
-            coverUrl: 'https://media.baltaanay.org/web/image/927-edc793ab/Pueblos%20ind%C3%ADgenas.png',
-			title: "Crisis del Estado de Derecho",
-            detailUrl: "/dp-indigenas",
-            author: "Raymundo",
-            text: "La crisis del Estado de Derecho. Por Lic. Raymundo Catz. El estado de derecho en crisis por los derechos de segunda y tercera generación.",
-            allowDownload: false, 
-series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/927-edc793ab/Pueblos%20ind%C3%ADgenas.png', 
-            titulo_serie: 'Derecho de los pueblos indígenas', 
-            descripcion_serie: 'Los derechos de tercera generación. Desarrolla los derechos de los pueblos indígenas o también conocidos como derechos de solidaridad.', 
-            url_serie: 'dp-indigenas' 
-        }},
-{
-            date: '2026-02-04',
-			mediaUrl: "https://lb.s3.odysee.tv/vods2.odysee.live/odysee-replays/dd57d90536480f9a751ba4429447fd5f613efce3/1770236623.mp4",
-            type: "video",
-			coverUrl: 'https://media.baltaanay.org/web/image/927-edc793ab/Pueblos%20ind%C3%ADgenas.png',
-            title: "Conceptos básicos de los Derechos Humanos",
-            detailUrl: "/dp-indigenas",
-            author: "Raymundo",
-            text: "Conceptos básicos de los Derechos Humanos",
-            allowDownload: false, 
-series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/927-edc793ab/Pueblos%20ind%C3%ADgenas.png', 
-            titulo_serie: 'Derecho de los pueblos indígenas', 
-            descripcion_serie: 'Los derechos de tercera generación. Desarrolla los derechos de los pueblos indígenas o también conocidos como derechos de solidaridad. Ciencias Sociales. Historia.', 
-            url_serie: 'dp-indigenas' 
-        }},
-{ 
-        date: '2026-02-02', 
-        type: 'video', 
-        mediaUrl: 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-1-2/417347225-44100-2-38463f72786e9.m4a', 
-        coverUrl: 'https://media.baltaanay.org/web/image/929-b905c3ef/DERECHO%20LABORAL.png', 
-        coverUrl2: 'https://media.baltaanay.org/web/image/929-b905c3ef/DERECHO%20LABORAL.png', // Cover2 para video expandido
-        title: 'Antecedentes Históricos del derecho de Trabajo', 
-        description: 'Antecedentes históricos del derecho de trabajo. Avidan Ortiz. Historia del derecho Laboral.', 
-        detailUrl: '/derecho-laboral-1', 
-        allowDownload: false,
-        author: "Avidan Ortiz", 
-        series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/929-b905c3ef/DERECHO%20LABORAL.png', 
-            titulo_serie: 'Derecho Laboral', 
-            descripcion_serie: 'Un derecho humano por excelencia. Es la ciencia, una disciplina pública. Ciencias Sociales.', 
-            url_serie: 'URL_SERIE' 
-        } 
-    },
-{ 
-        date: '2026-02-06', 
-        type: 'video', 
-        mediaUrl: 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/2026-1-13/ca5f6f25-3b96-ff31-bb04-e712a81ce076.m4a', 
-        coverUrl: 'https://media.baltaanay.org/web/image/929-b905c3ef/DERECHO%20LABORAL.png', 
-        coverUrl2: 'https://media.baltaanay.org/web/image/929-b905c3ef/DERECHO%20LABORAL.png', // Cover2 para video expandido
-        title: 'Fuentes del Derecho de Trabajo', 
-        description: 'Historia. Fuentes del Derecho de trabajo. Ciencia.', 
-        detailUrl: '/derecho-laboral-1', 
-        allowDownload: false,
-        author: "Avidan Ortiz", 
-        series: { 
-            portada_serie: 'https://media.baltaanay.org/web/image/929-b905c3ef/DERECHO%20LABORAL.png', 
-            titulo_serie: 'Derecho Laboral', 
-            descripcion_serie: 'Un derecho humano por excelencia. Es la ciencia, una disciplina pública. Ciencias Sociales.', 
-            url_serie: 'URL_SERIE' 
-        } 
-    },
-    { date: '2025-09-27', type: 'audio', mediaUrl: 'https://d3ctxlq1ktw2nl.cloudfront.net/staging/2025-8-28/408260699-44100-2-4b5edeb875805.m4a', coverUrl: 'https://s3-us-west-2.amazonaws.com/anchor-generated-image-bank/staging/podcast_uploaded_episode400/44500417/44500417-1759018710643-950caadc41ea7.jpg', title: 'Veliz Franco y Otros Vs. Guatemala - Exposición', description: 'Guatemala presentaba un alto índice de impunidad general, en cuyo marco la mayoría de los actos violentos que conllevaban la muerte de mujeres quedaban impunes.', detailUrl: 'https://media.baltaanay.org/dh/caso-veliz-franco-vs-guatemala', allowDownload: true, author: "Melany y Laura", series: { portada_serie: 'https://scout.es/wp-content/uploads/2021/12/186-01.jpg', titulo_serie: 'Derechos Humanos', descripcion_serie: 'Derechos humanos', url_serie: '/ddhh' } },
-    
-];
+            // ----------------------------------------------
+            // 2. ESTADO GLOBAL
+            // ----------------------------------------------
+            let currentView = 'inicio';
+            let currentVideoId = null;            // id del video en reproducción (o null si no hay)
+            let currentSerieEpisodes = [];         // episodios de la misma serie (ordenados)
+            let allEpisodes = VIDEOS;               // referencia
+            let filteredEpisodes = [...VIDEOS];     // para el feed
+            let activeFilter = 'todo';
+            let isPlayerVisible = false;
+            let isPipActive = false;
+            let isLocked = false;                   // bloquear controles
+            let favoriteIds = JSON.parse(localStorage.getItem('favorites')) || [];
+            let history = JSON.parse(localStorage.getItem('history')) || [];   // guarda objetos {id, time, duration} (el último tiempo)
+            let inProgress = JSON.parse(localStorage.getItem('inProgress')) || [];
 
-// --- SISTEMA DE PLAYLIST MEJORADO ---
-const playlistKey = 'streamhub_userPlaylist';
-let userPlaylist = JSON.parse(localStorage.getItem(playlistKey)) || [];
+            // Elementos DOM
+            const mainVideo = document.getElementById('mainVideo');
+            const pipVideo = document.getElementById('pipVideo');
+            const playerSection = document.getElementById('playerSection');
+            const pipDiv = document.getElementById('pipPlayer');
+            const viewInicio = document.getElementById('viewInicio');
+            const viewExplorar = document.getElementById('viewExplorar');
+            const viewNovedades = document.getElementById('viewNovedades');
+            const viewBiblioteca = document.getElementById('viewBiblioteca');
+            const episodesGrid = document.getElementById('episodesGrid');
+            const filterScroll = document.getElementById('filterScroll');
+            const menuToggle = document.getElementById('menuToggle');
+            const sidePanel = document.getElementById('sidePanel');
+            const overlay = document.getElementById('overlay');
 
-// Función mejorada para agregar a playlist
-function addToUserPlaylist(episodeData) {
-    if (!episodeData || !episodeData.mediaUrl) {
-        console.error("Faltan datos del episodio para agregar a la playlist");
-        return false;
-    }
-    
-    const exists = userPlaylist.some(item => item.mediaUrl === episodeData.mediaUrl);
-    
-    if (!exists) {
-        const playlistItem = {
-            mediaUrl: episodeData.mediaUrl,
-            mediaType: episodeData.type || episodeData.mediaType || 'audio',
-            coverUrlContainer: episodeData.cover || episodeData.coverUrlContainer || episodeData.coverUrl,
-            coverUrlInfo: episodeData.cover || episodeData.coverUrlInfo || episodeData.coverUrl,
-            title: episodeData.title,
-            detailUrl: episodeData.detailUrl || '#',
-            author: episodeData.author || 'Desconocido',
-            next: [],
-            text: episodeData.description || '',
-            allowDownload: episodeData.allowDownload !== undefined ? episodeData.allowDownload : true
-        };
-        
-        userPlaylist.push(playlistItem);
-        localStorage.setItem(playlistKey, JSON.stringify(userPlaylist));
-        
-        updateAddButtons(episodeData.id || episodeData.mediaUrl);
-        
-        return true;
-    }
-    
-    return false;
-}
-
-// Actualizar iconos de agregar
-function updateAddButtons(identifier) {
-    const buttons = document.querySelectorAll(`[data-episode-id="${identifier}"], [data-media-url="${identifier}"]`);
-    buttons.forEach(btn => {
-        if (btn.dataset.added !== 'true') {
-            if (btn.tagName === 'IMG') {
-                btn.src = ICONS.added;
+            // ----------------------------------------------
+            // 3. FUNCIONES AUXILIARES
+            // ----------------------------------------------
+            function shuffleArray(arr) { return arr.sort(() => Math.random() - 0.5); }
+            function sortBySerieThenId(episodes) {
+                // agrupar por serie, y dentro de cada serie ordenar por id ascendente
+                const series = {};
+                episodes.forEach(ep => {
+                    if (ep.serie) {
+                        if (!series[ep.serie]) series[ep.serie] = [];
+                        series[ep.serie].push(ep);
+                    }
+                });
+                // Para la vista 'serie': necesitamos el primer episodio de cada serie (el de menor id)
+                const firstOfEachSerie = [];
+                Object.values(series).forEach(list => {
+                    list.sort((a,b) => a.id - b.id);
+                    firstOfEachSerie.push(list[0]); // el primero
+                });
+                return firstOfEachSerie;
             }
-            btn.dataset.added = 'true';
-            btn.title = 'Añadido a tu lista';
-        }
-    });
-}
 
-// Verificar si un episodio está en la playlist
-function isInPlaylist(mediaUrl) {
-    return userPlaylist.some(item => item.mediaUrl === mediaUrl);
-}
-
-// --- PROCESAMIENTO DE DATOS ---
-function determineCategories(ep) {
-    const cats = new Set();
-    const text = (ep.title + ' ' + ep.description + ' ' + (ep.series?.titulo_serie || '') + ' ' + (ep.series?.descripcion_serie || '')).toLowerCase();
-
-    const patterns = {
-        "Derecho": /\b(derecho|penal|civil|constitucional|procesal|delito|ley|jurisprudencia|código|tribunal|justicia|proceso)\b/i,
-        "Física y Astronomía": /\b(física|fisica|mecánica|mecanica|cuántica|cuantica|termodinámica|termodinamica|newton|einstein|astronomía|astronomia|planeta|cosmos)\b/i,
-        "Matemáticas": /\b(matemática|matematicas|calculo|cálculo|algebra|álgebra|geometria|geometría|estadistica|estadística|probabilidad|ecuacion|ecuación|teorema|integral)\b/i,
-        "Historia": /\b(historia|histórico|historico|siglo|época|epoca|imperio|guerra|revolución|revolucion|antiguo|medieval)\b/i,
-        "Filosofía": /\b(filosofía|filosofia|kant|platon|platón|aristoteles|ética|etica|metafísica|metafisica|ontología|ontologia|epistemología|epistemologia)\b/i,
-        "Economía y Finanzas": /\b(economía|economia|finanzas|inflación|inflacion|keynes|oferta|demanda|macroeconomía|macroeconomia|pib|mercado)\b/i,
-        "Ciencias Sociales": /\b(sociología|sociologia|antropología|antropologia|psicología|psicologia|sociedad|cultura|identidad|género|genero|desigualdad)\b/i,
-        "Arte y Cultura": /\b(arte|pintura|escultura|arquitectura|renacimiento|barroco|música|musica|cultura|artístico|artistico)\b/i,
-        "Literatura y Audiolibros": /\b(audiolibro|libro|novela|cuento|poema|clásico|clasico|literatura|lectura)\b/i,
-        "Cine y TV": /\b(cine|película|pelicula|serie|director|guion|ficción|ficcion|animación|animacion)\b/i,
-        "Documentales": /\b(documental|bbc|ciencia|naturaleza|espacio|universo|planeta|nacional geographic)\b/i,
-        "Ciencias Naturales": /\b(biología|biologia|química|quimica|geología|geologia|ecología|ecologia|evolución|evolucion|genética|genetica|clima|botánica|botanica)\b/i,
-        "Tecnología e Informática": /\b(tecnología|tecnologia|programación|programacion|python|ia|computación|computacion|algoritmo|software|desarrollo)\b/i
-    };
-
-    for (const [cat, regex] of Object.entries(patterns)) {
-        if (regex.test(text)) cats.add(cat);
-    }
-
-    if (ep.type === 'video') {
-        if (text.includes('documental')) cats.add("Documentales");
-        else cats.add("Cine y TV");
-    }
-
-    if (cats.size === 0) cats.add("Otras Ciencias");
-
-    return Array.from(cats);
-}
-
-const DATA = USER_EPISODES.map((ep, i) => ({
-    id: i,
-    title: ep.title,
-    author: ep.author || ep.series?.titulo_serie || 'Conferencias Académicas',
-    categories: determineCategories(ep),
-    cover: ep.coverUrl,
-    coverWide: ep.coverUrl2 || ep.coverUrl, // Usa coverUrl2 si existe y no es false
-    mediaUrl: ep.mediaUrl,
-    type: ep.type,
-    description: ep.description + ' ' + (ep.series?.descripcion_serie || ''),
-    allowDownload: ep.allowDownload !== undefined ? ep.allowDownload : true,
-    detailUrl: ep.detailUrl,
-    date: ep.date,
-    series: ep.series
-}));
-
-// --- VARIABLES GLOBALES ---
-let currentView = 'feed';
-let lastScrollTop = 0; // VARIABLE DECLARADA CORRECTAMENTE
-let searchTimeout = null;
-let lastSearchQuery = '';
-
-// --- BÚSQUEDA MEJORADA DESKTOP ---
-function showDesktopSearchResults() {
-    const results = document.getElementById('desktopSearchResults');
-    results.classList.add('active');
-}
-
-function hideDesktopSearchResults() {
-    setTimeout(() => {
-        const results = document.getElementById('desktopSearchResults');
-        if (results) {
-            results.classList.remove('active');
-        }
-    }, 200);
-}
-
-function handleDesktopSearchInput(query) {
-    clearTimeout(searchTimeout);
-    
-    if (!query || query.trim() === '') {
-        clearDesktopSearchResults();
-        return;
-    }
-    
-    searchTimeout = setTimeout(() => {
-        const results = performQuickSearch(query);
-        renderDesktopSearchResults(results, query);
-    }, 300);
-}
-
-function handleDesktopSearchEnter(event) {
-    event.preventDefault();
-    const query = document.getElementById('desktopSearch').value.trim();
-    if (query) {
-        performFullSearch(query);
-        hideDesktopSearchResults();
-    }
-}
-
-function performQuickSearch(query) {
-    const term = query.toLowerCase().trim();
-    return DATA.filter(ep =>
-        ep.title.toLowerCase().includes(term) ||
-        ep.author.toLowerCase().includes(term) ||
-        ep.categories.some(c => c.toLowerCase().includes(term)) ||
-        ep.description.toLowerCase().includes(term)
-    ).slice(0, 5);
-}
-
-function renderDesktopSearchResults(results, query) {
-    const container = document.getElementById('desktopSearchResultsContent');
-    if (!container) return;
-    
-    if (results.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-4 text-gray-400">
-                <p>No encontramos resultados para "${query}"</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = results.map(ep => `
-        <div class="search-result-item" onclick="goToDetailFromSearch('${ep.detailUrl}', event)">
-            <div class="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                <img src="${ep.cover}" class="w-full h-full object-cover">
-            </div>
-            <div class="flex-1 min-w-0">
-                <h4 class="font-bold text-sm text-white truncate">${ep.title}</h4>
-                <p class="text-xs text-gray-400 truncate">${ep.author} • ${ep.type === 'video' ? 'Video' : 'Audio'}</p>
-            </div>
-        </div>
-    `).join('');
-    
-    // Agregar opción para ver todos los resultados
-    container.innerHTML += `
-        <div class="search-result-item mt-2 border-t border-white/10 pt-2" onclick="performFullSearch('${query}', event)">
-            <div class="flex items-center justify-center w-full">
-                <span class="text-blue-400 font-bold text-sm">Ver todos los resultados para "${query}"</span>
-            </div>
-        </div>
-    `;
-}
-
-function goToDetailFromSearch(url, event) {
-    event.stopPropagation();
-    event.preventDefault();
-    window.location.href = url; // Misma pestaña
-}
-
-function performFullSearch(query, event) {
-    if (event) {
-        event.stopPropagation();
-        event.preventDefault();
-    }
-    performSearch(query);
-    hideDesktopSearchResults();
-}
-
-function clearDesktopSearchResults() {
-    const container = document.getElementById('desktopSearchResultsContent');
-    if (container) {
-        container.innerHTML = '';
-    }
-    const results = document.getElementById('desktopSearchResults');
-    if (results) {
-        results.classList.remove('active');
-    }
-}
-
-// --- BÚSQUEDA MÓVIL ---
-function handleMobileSearchInput(query) {
-    clearTimeout(searchTimeout);
-    
-    if (!query || query.trim() === '') {
-        clearMobileSearchResults();
-        return;
-    }
-    
-    searchTimeout = setTimeout(() => {
-        const results = performQuickSearch(query);
-        renderMobileSearchResults(results, query);
-    }, 300);
-}
-
-function handleMobileSearchEnter(event) {
-    event.preventDefault();
-    const query = document.getElementById('mobileSearchInput').value.trim();
-    if (query) {
-        handleMobileSearch(query);
-    }
-}
-
-function handleMobileSearchButton() {
-    const query = document.getElementById('mobileSearchInput').value.trim();
-    if (query) {
-        handleMobileSearch(query);
-    }
-}
-
-function renderMobileSearchResults(results, query) {
-    const container = document.getElementById('mobileSearchResults');
-    if (!container) return;
-    
-    if (results.length === 0) {
-        container.innerHTML = `
-            <div class="text-center py-4 text-gray-400">
-                <p>No encontramos resultados para "${query}"</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = results.map(ep => `
-        <div class="search-result-item" onclick="goToDetailFromSearch('${ep.detailUrl}', event)">
-            <div class="w-12 h-12 rounded-md overflow-hidden flex-shrink-0">
-                <img src="${ep.cover}" class="w-full h-full object-cover">
-            </div>
-            <div class="flex-1 min-w-0">
-                <h4 class="font-bold text-sm text-white truncate">${ep.title}</h4>
-                <p class="text-xs text-gray-400 truncate">${ep.author} • ${ep.type === 'video' ? 'Video' : 'Audio'}</p>
-            </div>
-        </div>
-    `).join('');
-    
-    // Agregar opción para ver todos los resultados
-    container.innerHTML += `
-        <div class="search-result-item mt-2 border-t border-white/10 pt-2" onclick="handleMobileSearch('${query}')">
-            <div class="flex items-center justify-center w-full">
-                <span class="text-blue-400 font-bold text-sm">Ver todos los resultados para "${query}"</span>
-            </div>
-        </div>
-    `;
-}
-
-function clearMobileSearchResults() {
-    const container = document.getElementById('mobileSearchResults');
-    if (container) {
-        container.innerHTML = '';
-    }
-}
-
-function toggleMobileSearch() {
-    const el = document.getElementById('mobileSearchBar');
-    const overlay = document.getElementById('searchOverlay');
-    
-    if (el.classList.contains('open')) {
-        el.classList.remove('open');
-        overlay.classList.remove('active');
-        document.getElementById('mobileSearchInput').value = '';
-        clearMobileSearchResults();
-    } else {
-        el.classList.add('open');
-        overlay.classList.add('active');
-        document.getElementById('mobileSearchInput').focus();
-    }
-}
-
-function handleMobileSearch(query) {
-    const input = document.getElementById('mobileSearchInput');
-    const searchQuery = query || input.value.trim();
-    
-    if (searchQuery) {
-        performSearch(searchQuery);
-        closeSearch();
-    }
-}
-
-function closeSearch() {
-    const mobileBar = document.getElementById('mobileSearchBar');
-    const overlay = document.getElementById('searchOverlay');
-    
-    if (mobileBar && mobileBar.classList.contains('open')) {
-        mobileBar.classList.remove('open');
-    }
-    
-    if (overlay) {
-        overlay.classList.remove('active');
-    }
-    
-    const desktopSearch = document.getElementById('desktopSearch');
-    if (desktopSearch) {
-        desktopSearch.blur();
-    }
-    
-    clearDesktopSearchResults();
-    clearMobileSearchResults();
-}
-
-// --- NAVEGACIÓN Y VISTAS ---
-function toggleView(view) {
-    const feed = document.getElementById('feed-view');
-    const grid = document.getElementById('grid-view');
-    if (view === 'grid') {
-        feed.classList.add('hidden');
-        grid.classList.remove('hidden');
-        window.scrollTo(0, 0);
-    } else {
-        feed.classList.remove('hidden');
-        grid.classList.add('hidden');
-        const desktopSearch = document.getElementById('desktopSearch');
-        if (desktopSearch) desktopSearch.value = '';
-        const mobileInput = document.getElementById('mobileSearchInput');
-        if (mobileInput) mobileInput.value = '';
-        renderCategoryPills('Todos');
-    }
-    currentView = view;
-}
-
-function showFeed() { 
-    toggleView('feed'); 
-    closeSearch();
-}
-
-function performSearch(query) {
-    if (!query || query.trim() === '') { 
-        showFeed(); 
-        return; 
-    }
-    
-    const term = query.toLowerCase().trim();
-    lastSearchQuery = query;
-    
-    let results = DATA.filter(ep =>
-        ep.title.toLowerCase().includes(term) ||
-        ep.author.toLowerCase().includes(term) ||
-        ep.categories.some(c => c.toLowerCase().includes(term)) ||
-        ep.description.toLowerCase().includes(term)
-    );
-
-    renderGrid(results, `Resultados para "${query}"`);
-}
-
-function filterByCategory(cat) {
-    renderCategoryPills(cat);
-    if (cat === 'Todos') { 
-        showFeed(); 
-        return; 
-    }
-    const results = DATA.filter(ep => ep.categories.includes(cat));
-    renderGrid(results, cat);
-}
-
-// --- RENDER GRID Y CARDS MEJORADOS ---
-function renderGrid(items, title) {
-    toggleView('grid');
-    const gridContainer = document.getElementById('results-grid');
-    const emptyState = document.getElementById('empty-state');
-    const titleEl = document.getElementById('grid-title');
-    titleEl.innerText = title;
-    gridContainer.innerHTML = '';
-    
-    if (items.length === 0) {
-        emptyState.classList.remove('hidden');
-        gridContainer.classList.add('hidden');
-        const searchTerm = title.replace('Resultados para ', '').replace(/"/g, '');
-        document.getElementById('empty-msg').innerText = `No hemos encontrado nada para "${searchTerm}"`;
-        
-        const suggestions = [...DATA].sort(() => 0.5 - Math.random()).slice(0, 5);
-        const recGrid = document.getElementById('recommendations-grid');
-        recGrid.innerHTML = '';
-        suggestions.forEach(ep => recGrid.innerHTML += createGridCard(ep));
-    } else {
-        emptyState.classList.add('hidden');
-        gridContainer.classList.remove('hidden');
-        items.forEach(item => {
-            gridContainer.innerHTML += createGridCard(item);
-        });
-    }
-}
-
-function createGridCard(item) {
-    const isInPlaylistItem = isInPlaylist(item.mediaUrl);
-    const addIcon = isInPlaylistItem ? ICONS.added : ICONS.add;
-    const dlIcon = item.allowDownload ? ICONS.dl : ICONS.noDl;
-    
-    return `
-        <div class="grid-card group">
-            <div class="aspect-square bg-zinc-800 relative" onclick="goToDetail('${item.detailUrl}')">
-                <img src="${item.cover}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-                <div class="overlay-full">
-                    <img src="${addIcon}" class="action-icon" onclick="handleAdd(event, ${item.id}); return false;" 
-                         data-episode-id="${item.id}" data-added="${isInPlaylistItem}">
-                    <img src="${ICONS.play}" class="play-icon-lg" onclick="handlePlay(event, ${item.id}); return false;">
-                    <img src="${dlIcon}" class="action-icon" onclick="handleDl(event, ${item.id}); return false;" 
-                         title="${item.allowDownload ? 'Descargar' : 'Descarga no disponible'}">
-                </div>
-                <!-- Botón play para móvil -->
-                <div class="mobile-play-button" onclick="handlePlay(event, ${item.id}); return false;">
-                    <img src="${ICONS.play}" alt="Play">
-                </div>
-            </div>
-            <div onclick="goToDetail('${item.detailUrl}')">
-                <h4 class="font-bold text-sm text-white truncate">${item.title}</h4>
-                <p class="text-xs text-gray-500 truncate">${item.author}</p>
-            </div>
-        </div>
-    `;
-}
-
-function renderCategoryPills(activeCat = 'Todos') {
-    const container = document.getElementById('category-pills');
-    if (!container) return;
-    
-    container.innerHTML = '';
-    CATEGORIES.forEach(cat => {
-        const isActive = cat === activeCat;
-        const btn = document.createElement('button');
-        btn.className = `whitespace-nowrap px-4 py-1.5 rounded-full text-xs font-bold transition-all ${isActive ? 'bg-white text-black' : 'bg-white/10 text-gray-300 hover:bg-white/20'}`;
-        btn.innerText = cat;
-        btn.onclick = () => filterByCategory(cat);
-        container.appendChild(btn);
-    });
-}
-
-// --- COMPONENTES DE TARJETAS MEJORADOS ---
-function createStandardCard(ep) {
-    const isInPlaylistItem = isInPlaylist(ep.mediaUrl);
-    const addIcon = isInPlaylistItem ? ICONS.added : ICONS.add;
-    const dlIcon = ep.allowDownload ? ICONS.dl : ICONS.noDl;
-    
-    return `<div class="card-std group">
-        <div class="relative w-full aspect-square rounded-xl overflow-hidden bg-zinc-800" onclick="goToDetail('${ep.detailUrl}')">
-            <img src="${ep.cover}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500">
-            <div class="overlay-full">
-                <img src="${addIcon}" class="action-icon" onclick="handleAdd(event, ${ep.id}); return false;" 
-                     data-episode-id="${ep.id}" data-added="${isInPlaylistItem}">
-                <img src="${ICONS.play}" class="play-icon-lg" onclick="handlePlay(event, ${ep.id}); return false;">
-                <img src="${dlIcon}" class="action-icon" onclick="handleDl(event, ${ep.id}); return false;" 
-                     title="${ep.allowDownload ? 'Descargar' : 'Descarga no disponible'}">
-            </div>
-            <!-- Botón play para móvil -->
-            <div class="mobile-play-button" onclick="handlePlay(event, ${ep.id}); return false;">
-                <img src="${ICONS.play}" alt="Play">
-            </div>
-        </div>
-        <div onclick="goToDetail('${ep.detailUrl}')">
-            <h3 class="font-bold text-white text-sm truncate">${ep.title}</h3>
-            <p class="text-xs text-gray-400 mt-1 truncate">${ep.author}</p>
-        </div>
-    </div>`;
-}
-
-// --- TARJETA DE VIDEO EXPANDIBLE CON COVER 2 ---
-function createVideoExpand(ep) {
-    const isInPlaylistItem = isInPlaylist(ep.mediaUrl);
-    const addIcon = isInPlaylistItem ? ICONS.added : ICONS.add;
-    const dlIcon = ep.allowDownload ? ICONS.dl : ICONS.noDl;
-    const hasCover2 = ep.coverWide && ep.coverWide !== ep.cover;
-    
-    return `<div class="card-video group">
-        <!-- Miniatura 1 (cuadrada) - visible por defecto -->
-        <img src="${ep.cover}" class="absolute inset-0 w-full h-full object-cover z-10 group-hover:opacity-0 transition-opacity duration-300">
-        
-        <!-- Miniatura 2 (ancha) - visible en hover solo si existe -->
-        ${hasCover2 ? `
-        <img src="${ep.coverWide}" class="absolute inset-0 w-full h-full object-cover opacity-0 group-hover:opacity-100 transition-opacity duration-300">
-        ` : ''}
-        
-        <div class="overlay-full z-20">
-            <img src="${addIcon}" class="action-icon" onclick="handleAdd(event, ${ep.id}); return false;" 
-                 data-episode-id="${ep.id}" data-added="${isInPlaylistItem}">
-            <img src="${ICONS.play}" class="play-icon-lg" onclick="handlePlay(event, ${ep.id}); return false;">
-            <img src="${dlIcon}" class="action-icon" onclick="handleDl(event, ${ep.id}); return false;" 
-                 title="${ep.allowDownload ? 'Descargar' : 'Descarga no disponible'}">
-        </div>
-        <!-- Botón play para móvil -->
-        <div class="mobile-play-button z-30" onclick="handlePlay(event, ${ep.id}); return false;">
-            <img src="${ICONS.play}" alt="Play">
-        </div>
-        <div class="absolute bottom-2 left-2 z-20 bg-black/60 px-2 py-0.5 rounded text-[10px] font-bold">VIDEO</div>
-    </div>`;
-}
-
-function createListItem(ep, idx) {
-    const isInPlaylistItem = isInPlaylist(ep.mediaUrl);
-    const addIcon = isInPlaylistItem ? ICONS.added : ICONS.add;
-    
-    return `<div class="list-item group">
-        <span class="text-gray-500 font-bold w-4 text-center text-sm">${idx + 1}</span>
-        <div class="relative w-14 h-14 flex-shrink-0 rounded overflow-hidden" onclick="goToDetail('${ep.detailUrl}')">
-            <img src="${ep.cover}" class="w-full h-full object-cover">
-            <div class="overlay-mini" onclick="handlePlay(event, ${ep.id}); return false;"><img src="${ICONS.play}" class="play-icon-sm"></div>
-        </div>
-        <div class="flex-1 min-w-0" onclick="goToDetail('${ep.detailUrl}')">
-            <h4 class="font-bold text-sm truncate text-white">${ep.title}</h4>
-            <p class="text-xs text-gray-500 truncate">${ep.author}</p>
-        </div>
-        <button class="hidden lg:group-hover:block opacity-60 hover:opacity-100 pr-2" onclick="handleAdd(event, ${ep.id}); return false;">
-            <img src="${addIcon}" alt="Agregar" class="w-5 h-5" data-episode-id="${ep.id}" data-added="${isInPlaylistItem}">
-        </button>
-        <!-- Botón play para móvil (en lista) -->
-        <div class="lg:hidden mobile-play-button" style="position: static; margin-right: 8px;" onclick="handlePlay(event, ${ep.id}); return false;">
-            <img src="${ICONS.play}" alt="Play" class="w-4 h-4">
-        </div>
-    </div>`;
-}
-
-// --- CARRUSEL GENÉRICO ---
-function createCarousel(title, type, items, categoryContext) {
-    if (!items || items.length === 0) return '';
-    
-    const id = 'c-' + Math.random().toString(36).substr(2, 9);
-    let content = '';
-    
-    if (type === 'double') {
-        content = `<div id="${id}" class="flex flex-col flex-wrap h-[580px] gap-x-6 gap-y-6 overflow-x-auto no-scrollbar scroll-smooth">` + 
-                  items.map(ep => createStandardCard(ep)).join('') + 
-                  `</div>`;
-    } else if (type === 'list') {
-        content = `<div id="${id}" class="flex gap-8 overflow-x-auto no-scrollbar scroll-smooth pb-4">`;
-        for (let i = 0; i < items.length; i += 4) {
-            content += `<div class="card-list-group">` +
-                (items[i] ? createListItem(items[i], i) : '') +
-                (items[i+1] ? createListItem(items[i+1], i+1) : '') +
-                (items[i+2] ? createListItem(items[i+2], i+2) : '') +
-                (items[i+3] ? createListItem(items[i+3], i+3) : '') +
-                `</div>`;
-        }
-        content += `</div>`;
-    } else if (type === 'expand') {
-        content = `<div id="${id}" class="flex gap-4 overflow-x-auto no-scrollbar scroll-smooth py-2 pl-1">` + 
-                  items.map(ep => createVideoExpand(ep)).join('') + 
-                  `</div>`;
-    } else {
-        content = `<div id="${id}" class="flex gap-6 overflow-x-auto no-scrollbar scroll-smooth py-2 pl-1">` + 
-                  items.map(ep => createStandardCard(ep)).join('') + 
-                  `</div>`;
-    }
-    
-    return `<section class="carousel-wrapper relative group/section">
-        <div class="flex items-end justify-between mb-5 px-1">
-            <h2 class="text-2xl font-bold tracking-tight text-white hover:text-blue-500 transition-colors">${title}</h2>
-            <button onclick="filterByCategory('${categoryContext}')" class="text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-white">Ver todo</button>
-        </div>
-        <div class="relative">
-            <div class="nav-btn left" onclick="document.getElementById('${id}').scrollLeft -= 600"><button>❮</button></div>
-            ${content}
-            <div class="nav-btn right" onclick="document.getElementById('${id}').scrollLeft += 600"><button>❯</button></div>
-        </div>
-    </section>`;
-}
-
-// --- CARRUSEL DE SERIES ---
-function createSeriesCarousel() {
-    const id = 'c-series-' + Math.random().toString(36).substr(2, 9);
-    const seriesGroups = {};
-    DATA.forEach(ep => {
-        if (ep.series && ep.series.titulo_serie) {
-            const serieKey = ep.series.titulo_serie;
-            if (!seriesGroups[serieKey]) {
-                seriesGroups[serieKey] = {episodes: [], seriesInfo: ep.series};
+            // Obtener categorías únicas (basadas en el campo 'serie' y además 'todo' y 'serie' fijos)
+            function getCategories() {
+                let cats = new Set();
+                VIDEOS.forEach(v => { if (v.serie) cats.add(v.serie); });
+                let catsArray = Array.from(cats);
+                catsArray = shuffleArray(catsArray); // orden aleatorio
+                return ['todo', 'serie', ...catsArray];
             }
-            seriesGroups[serieKey].episodes.push(ep);
-        }
-    });
-    
-    const seriesKeys = Object.keys(seriesGroups);
-    if (seriesKeys.length === 0) return '';
-    
-    let content = `<div id="${id}" class="flex gap-8 overflow-x-auto no-scrollbar scroll-smooth pb-4">`;
-    
-    seriesKeys.forEach(serieKey => {
-        let group = seriesGroups[serieKey];
-        group.episodes.sort((a, b) => new Date(b.date) - new Date(a.date));
-        const s = group.seriesInfo;
-        if (!s || group.episodes.length < 1) return;
-        
-        content += `<div class="card-list-group">
-            <div class="mb-4 cursor-pointer" onclick="goToDetail('${s.url_serie}')">
-                <div class="relative w-full aspect-square rounded-xl overflow-hidden bg-zinc-800">
-                    <img src="${s.portada_serie}" class="w-full h-full object-cover">
-                </div>
-                <h3 class="font-bold text-white text-sm truncate mt-2">${s.titulo_serie}</h3>
-                <p class="text-xs text-gray-400">ver serie</p>
-            </div>`;
-        
-        group.episodes.slice(0, 4).forEach((ep, i) => {
-            content += createListItem(ep, i);
-        });
-        
-        content += `</div>`;
-    });
-    
-    content += `</div>`;
-    
-    return `<section class="carousel-wrapper relative group/section">
-        <div class="flex items-end justify-between mb-5 px-1">
-            <h2 class="text-2xl font-bold tracking-tight text-white hover:text-blue-500 transition-colors">Series y Cursos Académicos</h2>
-            <button class="text-xs font-bold text-gray-500 uppercase tracking-wider hover:text-white">Ver todo</button>
-        </div>
-        <div class="relative">
-            <div class="nav-btn left" onclick="document.getElementById('${id}').scrollLeft -= 600"><button>❮</button></div>
-            ${content}
-            <div class="nav-btn right" onclick="document.getElementById('${id}').scrollLeft += 600"><button>❯</button></div>
-        </div>
-    </section>`;
-}
 
-// --- HANDLERS MEJORADOS ---
-function handlePlay(e, id) {
-    e.stopPropagation();
-    e.preventDefault();
-    const ep = DATA.find(x => x.id == id);
-    
-    if (typeof window.playEpisodeExpanded === 'function') {
-        window.playEpisodeExpanded(
-            ep.mediaUrl, 
-            ep.type, 
-            ep.cover, 
-            ep.cover, 
-            ep.title, 
-            ep.detailUrl, 
-            ep.author, 
-            [], 
-            ep.description, 
-            ep.allowDownload
-        );
-    } else {
-        // Solo intentar descargar si hay reproductor externo
-        handleDl(e, id);
-    }
-    return false;
-}
-
-function handleAdd(e, id) {
-    e.stopPropagation();
-    e.preventDefault();
-    const ep = DATA.find(x => x.id == id);
-    const button = e.target.closest('img') || e.target;
-    
-    const agregado = addToUserPlaylist({
-        mediaUrl: ep.mediaUrl,
-        type: ep.type,
-        cover: ep.cover,
-        title: ep.title,
-        detailUrl: ep.detailUrl,
-        author: ep.author,
-        description: ep.description,
-        allowDownload: ep.allowDownload,
-        id: ep.id
-    });
-    
-    if (agregado) {
-        if (button.tagName === 'IMG') {
-            button.src = ICONS.added;
-        }
-        button.dataset.added = 'true';
-        if (button.parentElement) {
-            button.parentElement.title = 'Añadido a tu lista';
-        }
-        
-        button.style.transform = 'scale(1.2)';
-        setTimeout(() => {
-            button.style.transform = 'scale(1)';
-        }, 200);
-    }
-    
-    return false;
-}
-
-function handleDl(e, id) {
-    e.stopPropagation();
-    e.preventDefault();
-    const ep = DATA.find(x => x.id == id);
-    
-    if (!ep.allowDownload) {
-        alert('La descarga no está disponible para este episodio');
-        return false;
-    }
-    
-    const ext = ep.type === 'video' ? 'mp4' : 'mp3';
-    const filename = `${ep.title.replace(/[^a-z0-9]/gi, '_').substring(0, 50)}.${ext}`;
-    
-    try {
-        const a = document.createElement('a');
-        a.href = ep.mediaUrl;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        
-        // Si la descarga falla (no empieza con blob), abrir en nueva pestaña
-        setTimeout(() => {
-            if (!a.href.startsWith('blob:')) {
-                window.open(ep.mediaUrl, '_blank');
+            // Filtrar episodios según categoría
+            function filterEpisodes(category) {
+                if (category === 'todo') return [...VIDEOS];
+                if (category === 'serie') return sortBySerieThenId(VIDEOS); // primeros de cada serie
+                // categoría es nombre de serie
+                return VIDEOS.filter(v => v.serie === category).sort((a,b) => a.id - b.id);
             }
-        }, 1000);
-        
-    } catch (error) {
-        console.error('Error en descarga:', error);
-        // Fallback: abrir en nueva pestaña
-        window.open(ep.mediaUrl, '_blank');
-    }
-    
-    return false;
-}
 
-function goToDetail(url) {
-    if (url && url !== '#') {
-        window.location.href = url; // MISMA PESTAÑA
-    }
-}
+            // Renderizar grid de episodios (contenedor, lista)
+            function renderGrid(container, episodes) {
+                if (!container) return;
+                container.innerHTML = '';
+                episodes.forEach(ep => {
+                    const card = document.createElement('div');
+                    card.className = 'episode-card';
+                    card.dataset.id = ep.id;
+                    card.innerHTML = `
+                        <div class="thumbnail"><img src="${ep.cover}" loading="lazy"></div>
+                        <div class="episode-title"><span>${ep.titulo}</span><span>${ep.serie || 'Suelto'}</span></div>
+                    `;
+                    card.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        playVideoById(ep.id);
+                    });
+                    container.appendChild(card);
+                });
+            }
 
-// --- SCROLL HEADER (CORREGIDO) ---
-window.addEventListener('scroll', () => {
-    const st = window.pageYOffset || document.documentElement.scrollTop;
-    const topHeader = document.getElementById('top-header');
-    const mobileSearch = document.getElementById('mobileSearchBar');
-    
-    // Verificar si los elementos existen
-    if (!topHeader || !mobileSearch) {
-        return;
-    }
-    
-    if (st > lastScrollTop && st > 100) {
-        topHeader.style.transition = 'opacity 0.3s ease';
-        topHeader.style.opacity = '0';
-        topHeader.style.pointerEvents = 'none';
-        mobileSearch.style.transition = 'opacity 0.3s ease';
-        mobileSearch.style.opacity = '0';
-        mobileSearch.style.pointerEvents = 'none';
-    } else {
-        topHeader.style.opacity = '1';
-        topHeader.style.pointerEvents = 'auto';
-        mobileSearch.style.opacity = '1';
-        mobileSearch.style.pointerEvents = 'auto';
-    }
-    lastScrollTop = st <= 0 ? 0 : st;
-}, false);
+            // Renderizar feed con filtro activo
+            function refreshFeed() {
+                filteredEpisodes = filterEpisodes(activeFilter);
+                renderGrid(episodesGrid, filteredEpisodes);
+            }
 
-// --- INICIALIZACIÓN ---
-function init() {
-    console.log('Inicializando StreamHub...');
-    
-    // Verificar datos
-    if (!DATA || DATA.length === 0) {
-        console.error('No hay datos para mostrar');
-        const feedView = document.getElementById('feed-view');
-        if (feedView) {
-            feedView.innerHTML = 
-                '<div class="text-center py-20"><p class="text-gray-400 text-lg">No hay contenido disponible en este momento.</p></div>';
-        }
-        return;
-    }
-    
-    // Renderizar categorías
-    renderCategoryPills();
-    
-    const feed = document.getElementById('feed-view');
-    if (!feed) return;
-    
-    // Función segura para obtener elementos aleatorios
-    const getRandomSafe = (count, filterFn = () => true) => {
-        const filtered = DATA.filter(filterFn);
-        if (filtered.length === 0) return [];
-        
-        const shuffled = [...filtered].sort(() => 0.5 - Math.random());
-        return shuffled.slice(0, Math.min(count, shuffled.length));
-    };
-    
-    // Limpiar feed
-    feed.innerHTML = '';
-    
-    // AGREGAR TODOS LOS CARRUSELES SOLICITADOS
-    feed.innerHTML += createCarousel("Nuevos Lanzamientos", "standard", 
-        getRandomSafe(15), "Todos");
-    
-    feed.innerHTML += createCarousel("Series de Video", "expand", 
-        getRandomSafe(10, e => e.type === 'video'), "Cine y TV");
-    
-    feed.innerHTML += createCarousel("Top Semanal", "list", 
-        getRandomSafe(16), "Todos");
-    
-    feed.innerHTML += createCarousel("Para Estudiar Profundamente", "double", 
-        getRandomSafe(20), "Matemáticas");
-    
-    feed.innerHTML += createCarousel("Matemáticas", "standard", 
-        getRandomSafe(15, e => e.categories.includes("Matemáticas")), "Matemáticas");
-    
-    feed.innerHTML += createCarousel("Especiales en Video", "expand", 
-        getRandomSafe(10, e => e.type === 'video'), "Documentales");
-    
-    feed.innerHTML += createCarousel("Física y Astronomía", "standard", 
-        getRandomSafe(15, e => e.categories.includes("Física y Astronomía")), "Física y Astronomía");
-    
-    feed.innerHTML += createCarousel("Ciencias Naturales y Tecnología", "double", 
-        getRandomSafe(20, e => e.categories.some(c => 
-            ["Ciencias Naturales", "Tecnología e Informática"].includes(c))), "Otras Ciencias");
-    
-    feed.innerHTML += createSeriesCarousel();
-    
-    feed.innerHTML += createCarousel("Otras Ciencias y Disciplinas", "standard", 
-        getRandomSafe(15, e => e.categories.includes("Otras Ciencias") || 
-            e.categories.some(c => ["Ciencias Naturales", "Tecnología e Informática"].includes(c))), 
-        "Otras Ciencias");
-    
-    console.log('StreamHub inicializado correctamente');
-}
+            // Renderizar filtros
+            function renderFilters() {
+                const cats = getCategories();
+                filterScroll.innerHTML = '';
+                cats.forEach(cat => {
+                    const chip = document.createElement('span');
+                    chip.className = `filter-chip ${cat === activeFilter ? 'active' : ''}`;
+                    chip.textContent = cat.charAt(0).toUpperCase() + cat.slice(1);
+                    chip.dataset.filter = cat;
+                    chip.addEventListener('click', () => {
+                        activeFilter = cat;
+                        renderFilters();
+                        refreshFeed();
+                    });
+                    filterScroll.appendChild(chip);
+                });
+            }
 
-// Inicializar cuando el DOM esté listo
-if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init);
-} else {
-    init();
-}
+            // Reproducir video por ID (actualiza URL, player, etc)
+            function playVideoById(id) {
+                const video = VIDEOS.find(v => v.id === id);
+                if (!video) return;
+                currentVideoId = id;
+                // Actualizar hash para enrutamiento
+                window.location.hash = `#/video/${id}`;
+                // Mostrar player sección
+                playerSection.style.display = 'block';
+                isPlayerVisible = true;
+                // Ocultar otras vistas (feed y demás) - pero no las ocultamos, solo el player aparece arriba
+                // En nuestra estructura, el player está dentro del main, pero queremos que se vea sobre el feed.
+                // Para simplificar, el player se muestra y el feed sigue abajo.
+                // Pero en la especificación, al reproducir se debe ver el reproductor y luego el feed de relacionados, etc. Eso ya está.
+                // Ocultar el PIP si estaba
+                pipDiv.style.display = 'none';
+                if (isPipActive) { pipVideo.pause(); isPipActive = false; }
 
-// --- FUNCIONES GLOBALES PARA USO EXTERNO ---
-window.StreamHub = {
-    addToPlaylist: addToUserPlaylist,
-    playEpisode: function(episodeData) {
-        if (typeof window.playEpisodeExpanded === 'function') {
-            window.playEpisodeExpanded(
-                episodeData.mediaUrl, 
-                episodeData.type || 'audio', 
-                episodeData.cover || episodeData.coverUrlContainer, 
-                episodeData.cover || episodeData.coverUrlInfo, 
-                episodeData.title, 
-                episodeData.detailUrl || '#', 
-                episodeData.author || 'Desconocido', 
-                [], 
-                episodeData.description || episodeData.text || '', 
-                episodeData.allowDownload !== undefined ? episodeData.allowDownload : true
-            );
-        } else {
-            window.location.href = episodeData.detailUrl || episodeData.mediaUrl;
-        }
-    }
-};
-</script>
+                // Cargar video en reproductor principal
+                mainVideo.src = video.url;
+                mainVideo.load();
+                mainVideo.play().catch(e => console.log('Autoplay bloqueado'));
+
+                // Actualizar metadatos
+                document.getElementById('videoTitle').textContent = video.titulo;
+                document.getElementById('descShort').textContent = video.descripcion.substring(0, 100) + '...';
+                document.getElementById('descFull').textContent = video.descripcion;
+
+                // Manejar serie
+                if (video.serie) {
+                    currentSerieEpisodes = VIDEOS.filter(v => v.serie === video.serie).sort((a,b) => a.id - b.id);
+                    const serieCarousel = document.getElementById('serieCarousel');
+                    renderGrid(serieCarousel, currentSerieEpisodes.filter(ep => ep.id !== id)); // no mostrar el actual
+                    document.getElementById('serieCarouselContainer').style.display = 'block';
+                } else {
+                    document.getElementById('serieCarouselContainer').style.display = 'none';
+                    currentSerieEpisodes = [];
+                }
+
+                // Relacionados aleatorios (excluyendo el actual)
+                let relacionados = VIDEOS.filter(v => v.id !== id);
+                relacionados = shuffleArray(relacionados).slice(0, 10);
+                renderGrid(document.getElementById('relatedCarousel'), relacionados);
+
+                // Media Session API
+                if ('mediaSession' in navigator) {
+                    navigator.mediaSession.metadata = new MediaMetadata({
+                        title: video.titulo,
+                        artist: video.serie || 'Episodio suelto',
+                        album: 'Video SPA',
+                        artwork: [{ src: video.cover, sizes: '512x512', type: 'image/jpg' }]
+                    });
+                    // Acciones
+                    navigator.mediaSession.setActionHandler('play', () => mainVideo.play());
+                    navigator.mediaSession.setActionHandler('pause', () => mainVideo.pause());
+                    navigator.mediaSession.setActionHandler('previoustrack', () => { if (currentSerieEpisodes.length) { let idx = currentSerieEpisodes.findIndex(e => e.id === currentVideoId); if (idx > 0) playVideoById(currentSerieEpisodes[idx-1].id); } });
+                    navigator.mediaSession.setActionHandler('nexttrack', () => { if (currentSerieEpisodes.length) { let idx = currentSerieEpisodes.findIndex(e => e.id === currentVideoId); if (idx < currentSerieEpisodes.length-1) playVideoById(currentSerieEpisodes[idx+1].id); } });
+                }
+
+                // Actualizar botón favorito
+                updateFavButton();
+            }
+
+            function updateFavButton() {
+                const favBtn = document.getElementById('favBtn');
+                if (favoriteIds.includes(currentVideoId)) {
+                    favBtn.innerHTML = '<img src="https://video-nikichitonjesus.odoo.com/web/image/620-c48f85cd/agregado.webp" alt="favorito"><span>Quitar</span>';
+                } else {
+                    favBtn.innerHTML = '<img src="https://video-nikichitonjesus.odoo.com/web/image/445-ad116cfc/episodios.webp" alt="favorito"><span>Favorito</span>';
+                }
+            }
+
+            // ----------------------------------------------
+            // 4. ENRUTAMIENTO (hash)
+            // ----------------------------------------------
+            function handleRoute() {
+                const hash = window.location.hash.slice(1) || '/';
+                if (hash.startsWith('/video/')) {
+                    const id = parseInt(hash.split('/')[2]);
+                    if (!isNaN(id) && VIDEOS.some(v => v.id === id)) {
+                        playVideoById(id);
+                    } else {
+                        // No encontrado, redirigir a inicio
+                        window.location.hash = '#/';
+                    }
+                } else {
+                    // Ruta normal: mostrar vista correspondiente
+                    const path = hash.split('/')[1] || 'inicio';
+                    showView(path);
+                }
+            }
+
+            function showView(viewName) {
+                // Ocultar todas las vistas
+                viewInicio.classList.remove('active');
+                viewExplorar.classList.remove('active');
+                viewNovedades.classList.remove('active');
+                viewBiblioteca.classList.remove('active');
+                if (viewName === 'inicio') viewInicio.classList.add('active');
+                if (viewName === 'explorar') viewExplorar.classList.add('active');
+                if (viewName === 'novedades') viewNovedades.classList.add('active');
+                if (viewName === 'biblioteca') viewBiblioteca.classList.add('active');
+                currentView = viewName;
+
+                // Si es novedades, renderizar
+                if (viewName === 'novedades') {
+                    // Top 10 (ordenado por id descendente)
+                    const top10 = [...VIDEOS].sort((a,b) => b.id - a.id).slice(0,10);
+                    renderGrid(document.getElementById('top10Carousel'), top10);
+                    // Últimos 12
+                    const latest = [...VIDEOS].sort((a,b) => b.id - a.id).slice(0,12);
+                    renderGrid(document.getElementById('latestGrid'), latest);
+                }
+                if (viewName === 'biblioteca') {
+                    renderBiblioteca();
+                }
+                if (viewName === 'explorar') {
+                    document.getElementById('searchResults').innerHTML = '';
+                }
+            }
+
+            function renderBiblioteca() {
+                // En progreso: episodios con tiempo guardado pero no terminados (menos del 95%)
+                const progEp = inProgress.filter(p => p.percent < 0.95).map(p => VIDEOS.find(v => v.id === p.id)).filter(v => v);
+                renderGrid(document.getElementById('progressCarousel'), progEp);
+                // Favoritos
+                const favEp = favoriteIds.map(id => VIDEOS.find(v => v.id === id)).filter(v => v);
+                renderGrid(document.getElementById('favoritesGrid'), favEp.slice(0,6));
+                // Historial (últimos vistos)
+                const histEp = history.slice(-10).reverse().map(h => VIDEOS.find(v => v.id === h.id)).filter(v => v);
+                renderGrid(document.getElementById('historyGrid'), histEp);
+            }
+
+            // ----------------------------------------------
+            // 5. EVENTOS Y CONTROL DE REPRODUCTOR
+            // ----------------------------------------------
+            // Play/Pause
+            document.getElementById('playPauseBtn').addEventListener('click', () => {
+                if (mainVideo.paused) mainVideo.play();
+                else mainVideo.pause();
+            });
+            mainVideo.addEventListener('play', () => {
+                document.getElementById('playPauseIcon').src = 'https://nikichitonjesus.odoo.com/web/image/716-c7a68f34/pausevid.png';
+            });
+            mainVideo.addEventListener('pause', () => {
+                document.getElementById('playPauseIcon').src = 'https://nikichitonjesus.odoo.com/web/image/715-d5d403f0/playvid.png';
+            });
+
+            // Seek
+            document.getElementById('seekBack').addEventListener('click', () => { mainVideo.currentTime -= 10; });
+            document.getElementById('seekForward').addEventListener('click', () => { mainVideo.currentTime += 10; });
+
+            // Barra de progreso
+            const progressBar = document.getElementById('progressBar');
+            const progressFill = document.getElementById('progressFill');
+            mainVideo.addEventListener('timeupdate', () => {
+                if (mainVideo.duration) {
+                    const percent = (mainVideo.currentTime / mainVideo.duration) * 100;
+                    progressFill.style.width = percent + '%';
+                    document.getElementById('currentTime').textContent = formatTime(mainVideo.currentTime);
+                    document.getElementById('duration').textContent = formatTime(mainVideo.duration);
+                    // Guardar progreso en inProgress
+                    const existing = inProgress.findIndex(p => p.id === currentVideoId);
+                    const prog = { id: currentVideoId, time: mainVideo.currentTime, duration: mainVideo.duration, percent: mainVideo.currentTime/mainVideo.duration };
+                    if (existing >= 0) inProgress[existing] = prog;
+                    else inProgress.push(prog);
+                    localStorage.setItem('inProgress', JSON.stringify(inProgress));
+                }
+            });
+            progressBar.addEventListener('click', (e) => {
+                const rect = progressBar.getBoundingClientRect();
+                const pos = (e.clientX - rect.left) / rect.width;
+                mainVideo.currentTime = pos * mainVideo.duration;
+            });
+
+            function formatTime(sec) {
+                let h = Math.floor(sec/3600);
+                let m = Math.floor((sec%3600)/60);
+                let s = Math.floor(sec%60);
+                if (h>0) return `${h}:${m.toString().padStart(2,'0')}:${s.toString().padStart(2,'0')}`;
+                return `${m}:${s.toString().padStart(2,'0')}`;
+            }
+
+            // Volumen
+            const volumeSlider = document.getElementById('volumeSlider');
+            volumeSlider.addEventListener('input', () => {
+                mainVideo.volume = volumeSlider.value;
+                // cambiar icono si mute
+            });
+
+            // Velocidad
+            document.getElementById('speedSlider').addEventListener('input', (e) => {
+                mainVideo.playbackRate = e.target.value;
+            });
+
+            // Anterior/Siguiente (para serie)
+            document.getElementById('prevBtn').addEventListener('click', () => {
+                if (!currentSerieEpisodes.length) return;
+                let idx = currentSerieEpisodes.findIndex(e => e.id === currentVideoId);
+                if (idx > 0) playVideoById(currentSerieEpisodes[idx-1].id);
+            });
+            document.getElementById('nextBtn').addEventListener('click', () => {
+                if (!currentSerieEpisodes.length) return;
+                let idx = currentSerieEpisodes.findIndex(e => e.id === currentVideoId);
+                if (idx < currentSerieEpisodes.length-1) playVideoById(currentSerieEpisodes[idx+1].id);
+            });
+
+            // Lock controles
+            let lockBtn = document.getElementById('lockBtn');
+            lockBtn.addEventListener('click', () => {
+                isLocked = !isLocked;
+                lockBtn.textContent = isLocked ? '🔒' : '🔓';
+                // Deshabilitar todos los botones excepto lock y fullscreen? (simplificado)
+            });
+
+            // Fullscreen
+            document.getElementById('fullscreenBtn').addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    document.querySelector('.player-container').requestFullscreen();
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+
+            // Salir del reproductor (cerrar vista de player)
+            document.getElementById('closePlayerBtn').addEventListener('click', () => {
+                playerSection.style.display = 'none';
+                isPlayerVisible = false;
+                // Activar PIP con el video actual
+                if (!mainVideo.paused) {
+                    pipVideo.src = mainVideo.src;
+                    pipVideo.currentTime = mainVideo.currentTime;
+                    pipVideo.play();
+                    pipDiv.style.display = 'block';
+                    isPipActive = true;
+                }
+                // mainVideo.pause(); // no paramos, pasa a PIP
+            });
+
+            // Favoritos
+            document.getElementById('favBtn').addEventListener('click', () => {
+                if (favoriteIds.includes(currentVideoId)) {
+                    favoriteIds = favoriteIds.filter(id => id !== currentVideoId);
+                } else {
+                    favoriteIds.push(currentVideoId);
+                }
+                localStorage.setItem('favorites', JSON.stringify(favoriteIds));
+                updateFavButton();
+            });
+
+            // Compartir (simulado)
+            document.getElementById('shareBtn').addEventListener('click', () => {
+                navigator.clipboard?.writeText(window.location.href);
+                alert('Enlace copiado al portapapeles');
+            });
+
+            // Descargar (simulado)
+            document.getElementById('downloadBtn').addEventListener('click', () => {
+                const a = document.createElement('a');
+                a.href = VIDEOS.find(v=>v.id===currentVideoId).url;
+                a.download = 'video.mp4';
+                a.click();
+            });
+
+            // Incrustar
+            document.getElementById('embedBtn').addEventListener('click', () => {
+                const embedCode = `<iframe src="${window.location.origin}/embed/${currentVideoId}" width="560" height="315" frameborder="0"></iframe>`;
+                navigator.clipboard?.writeText(embedCode);
+                alert('Código de incrustación copiado');
+            });
+
+            // Leer más
+            document.getElementById('readMoreBtn').addEventListener('click', () => {
+                document.getElementById('descriptionBox').classList.toggle('expanded');
+            });
+
+            // Scroll filtros
+            document.getElementById('filterScrollLeft').addEventListener('click', () => {
+                filterScroll.scrollBy({ left: -200, behavior: 'smooth' });
+            });
+            document.getElementById('filterScrollRight').addEventListener('click', () => {
+                filterScroll.scrollBy({ left: 200, behavior: 'smooth' });
+            });
+
+            // Menú lateral
+            menuToggle.addEventListener('click', () => {
+                sidePanel.classList.add('open');
+                overlay.classList.add('show');
+            });
+            overlay.addEventListener('click', () => {
+                sidePanel.classList.remove('open');
+                overlay.classList.remove('show');
+            });
+
+            // Navegación desde panel y barra móvil
+            document.querySelectorAll('[data-view]').forEach(link => {
+                link.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    const view = link.dataset.view;
+                    window.location.hash = view === 'inicio' ? '#/' : `#/${view}`;
+                    sidePanel.classList.remove('open');
+                    overlay.classList.remove('show');
+                });
+            });
+
+            // Buscador en explorar
+            document.getElementById('searchInput').addEventListener('input', (e) => {
+                const term = e.target.value.toLowerCase();
+                const results = VIDEOS.filter(v => v.titulo.toLowerCase().includes(term) || (v.serie && v.serie.toLowerCase().includes(term)));
+                renderGrid(document.getElementById('searchResults'), results);
+            });
+
+            // Vaciar historial
+            document.getElementById('clearHistory')?.addEventListener('click', () => {
+                history = [];
+                localStorage.setItem('history', JSON.stringify(history));
+                renderBiblioteca();
+            });
+
+            // Reordenar favoritos (simulado)
+            document.getElementById('reorderFavs')?.addEventListener('click', () => {
+                alert('Función reordenar (implementar drag&drop)');
+            });
+
+            // Ver todos los favoritos
+            document.getElementById('viewAllFavs')?.addEventListener('click', () => {
+                const favEp = favoriteIds.map(id => VIDEOS.find(v => v.id === id)).filter(v => v);
+                renderGrid(document.getElementById('favoritesGrid'), favEp);
+            });
+
+            // Scroll: activar PIP si el reproductor sale de la vista
+            window.addEventListener('scroll', () => {
+                if (!isPlayerVisible || isPipActive) return;
+                const rect = playerSection.getBoundingClientRect();
+                if (rect.bottom < 0 || rect.top > window.innerHeight) {
+                    // Fuera de pantalla
+                    if (!mainVideo.paused) {
+                        pipVideo.src = mainVideo.src;
+                        pipVideo.currentTime = mainVideo.currentTime;
+                        pipVideo.play();
+                        pipDiv.style.display = 'block';
+                        isPipActive = true;
+                    }
+                } else {
+                    // Dentro de pantalla, ocultar PIP si estaba activo
+                    if (isPipActive) {
+                        pipDiv.style.display = 'none';
+                        pipVideo.pause();
+                        isPipActive = false;
+                    }
+                }
+            });
+
+            // Al terminar el video, pasar al siguiente de la serie si existe
+            mainVideo.addEventListener('ended', () => {
+                if (currentSerieEpisodes.length) {
+                    let idx = currentSerieEpisodes.findIndex(e => e.id === currentVideoId);
+                    if (idx < currentSerieEpisodes.length-1) {
+                        playVideoById(currentSerieEpisodes[idx+1].id);
+                    } else {
+                        // Si es el último, reproducir relacionado aleatorio
+                        let randomRel = VIDEOS.filter(v => v.id !== currentVideoId);
+                        randomRel = shuffleArray(randomRel);
+                        if (randomRel.length) playVideoById(randomRel[0].id);
+                    }
+                } else {
+                    // Episodio suelto, reproducir relacionado aleatorio
+                    let randomRel = VIDEOS.filter(v => v.id !== currentVideoId);
+                    randomRel = shuffleArray(randomRel);
+                    if (randomRel.length) playVideoById(randomRel[0].id);
+                }
+            });
+
+            // Inicialización
+            renderFilters();
+            refreshFeed();
+
+            // Escuchar cambios de hash
+            window.addEventListener('hashchange', handleRoute);
+            if (!window.location.hash || window.location.hash === '#') {
+                window.location.hash = '#/';
+            } else {
+                handleRoute();
+            }
+
+            // Inyectar barra móvil (ya está en HTML, pero aseguramos visibilidad con JS)
+            // La barra ya está en el HTML fijo, no hace falta inyectar.
+
+            // Registrar en historial al iniciar reproducción (se puede hacer en playVideoById)
+            function addToHistory(id) {
+                history.push({ id, timestamp: Date.now() });
+                if (history.length > 50) history.shift();
+                localStorage.setItem('history', JSON.stringify(history));
+            }
+            // Llamar a addToHistory cuando se reproduce (modificar playVideoById)
+            const originalPlay = playVideoById;
+            playVideoById = function(id) {
+                addToHistory(id);
+                originalPlay(id);
+            };
+            // Sobrescribir
+            window.playVideoById = playVideoById;
+
+            // Exponer funciones globales si es necesario
+        })();
+    </script>
+</body>
+</html>
